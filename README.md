@@ -1,0 +1,70 @@
+# X_watcher
+
+一个可扩展的 X 推文监测 agent 框架。首个场景是关注 `@thsottiaux`：每半小时读取新推文，发现重置相关信息后提醒，并在北京时间每天 **08:00** 整理前一天的内容与其中提到的 ChatGPT 更新。
+
+> **当前 v0.1 是可运行的模拟框架。** 真实 X 读取、LLM 分析、邮件发送、持久化存储和常驻部署尚未接入。没有后台服务正在运行；`live` 模式会明确拒绝启动。模拟数据不代表 Tibo 真实言论。
+
+## 快速开始
+
+需要 Node.js 22.12+。
+
+```sh
+npm ci
+npm run check
+npm test
+npm run demo
+```
+
+演示使用固定时钟、虚构推文、内存存储及邮件预览，运行两次 tick 验证同一进程中不会重复通知。没有网络请求，不需要 API 密钥。
+
+复制 `.env.example` 为 `.env`，可调整监测账号、轮询间隔、时区、摘要时间、收件人。然后运行 `npm start` 读取配置并执行一次模拟演示；它会退出，**不是常驻服务**。在当前演示中，日期固定为 2026-01-02，北京时间 08:00，因此其他时区/摘要时间可能尚未到点。真实邮箱仅保存在忽略的 `.env` 中。
+
+## 模块
+
+```text
+src/
+  domain/         模型、端口、时间窗口、校验、错误
+  application/    读取分析、每日摘要、通知发送、可插拔规则
+  adapters/       模拟数据源、模拟分析、预览通知、内存存储、时钟、日志
+  runtime/        可注入时钟的调度器，不依赖 SDK
+  bootstrap.ts    依赖组装与运行模式校验
+  config.ts       环境变量校验
+  cli.ts          命令入口
+  demo.ts         安全的端到端模拟
+scripts/          分层依赖检查
+ tests/           行为测试（无真实服务）
+docs/             架构、接口扩展指南、路线图
+```
+
+| 扩展点 | 接口 | 首版实现 |
+| --- | --- | --- |
+| X / RSS / 其他来源 | `PostSource` | `FixtureSource` |
+| LLM / 本地分析 | `ContentAnalyzer` | `FixtureAnalyzer` |
+| 邮件 / Webhook / 其他通知 | `NotificationChannel` | `PreviewChannel` |
+| SQLite / 其他数据库 | `WatchStore` | `MemoryStore` |
+| 关键词 / 重置 / 其他规则 | `NotificationRule` | `ResetRule` |
+| 摘要排版 | `DigestRenderer` | `TextDigestRenderer` |
+| 测试时间 / 系统时间 | `Clock` | `ManualClock` / `SystemClock` |
+| 日志 / 指标 | `EventSink` | `ConsoleEvents` |
+
+调度器对每个目标按配置间隔发起查询；同一实例并发 tick 合并执行。查询、分析及规则计算全部成功后，存储一次提交新帖、游标、通知。重置提醒优先进入发送流程；每日摘要在当地 08:00 之后生成，覆盖前一天 `[00:00, 次日 00:00)`。当日没有新帖时不发送空摘要。
+
+每条摘要附来源链接。重置提醒保留原文时间和时区；原文没有写清楚就显示未知，不推算用户实际账户额度。ChatGPT 更新只是该账号推文中提及的内容，不等同于已核实的官方更新全集。
+
+## 首版边界
+
+- 内存存储仅保证当前实例中的去重和原子语义；重启会丢失状态，不能用于无人值守运行。
+- 数据源必须完成分页后返回完整批次；首次拉取需要覆盖报告窗口，这是未来真实适配器的合同要求。
+- 当前摘要只处理最近一个已到期的日期；离线多日补发、迟到推文修订、首次启动历史提醒策略在后续阶段实现。
+- 邮件 `accepted` 表示供应商接受提交，不代表成功投递。未知结果进入 `needs_attention`，不自动重试。
+- “立即提醒”是发现后立即处理，正常轮询发现延迟约 0–30 分钟，服务故障会延长。
+- 调度仅提供可测试的 `tick()`；常驻进程、跨进程互斥、限流退避、停止与恢复将在持久化阶段加入。
+
+## 维护
+
+`npm run check` 同时执行严格类型检查与分层依赖检查。GitHub Actions 在 Linux/Windows、Node 22.12/24 上执行 check、test、demo，不调用真实服务。依赖固定并提交 lockfile；升级时走 PR 并通过同样检查。
+
+- [架构与一致性约定](docs/ARCHITECTURE.md)
+- [如何添加功能](docs/EXTENDING.md)
+- [分阶段路线图](docs/ROADMAP.md)
+- [项目开发规则](AGENTS.md)
