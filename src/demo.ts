@@ -1,4 +1,5 @@
 import type { Analysis, Post, RuntimeConfig } from './domain/model.js';
+import { Sha256Hasher } from './adapters/hash.js';
 import { loadConfig } from './config.js';
 import { createApplication } from './bootstrap.js';
 import { ManualClock } from './adapters/clock.js';
@@ -21,11 +22,14 @@ export async function runDemo(config: RuntimeConfig = loadConfig({})): Promise<v
     posts.push({ id, targetId: target.id, publishedAt: '2026-01-01T04:00:00Z',
       text: '[SIMULATED] ChatGPT demo update. Limits reset tomorrow at 09:00 UTC.',
       url: 'https://example.invalid/simulated-post' });
+    posts.push({ ...posts[posts.length - 1]!, id: `${id}:fresh`, publishedAt: '2026-01-01T23:59:00Z' });
+    store.registerTarget({ ...target, authorId: `fixture:${target.handle.toLowerCase()}`, enabled: true, monitorStartedAt: '2026-01-01T23:58:00Z', configRevision: config.revision });
     answers.set(id, { summary: '【模拟】发布了 ChatGPT 功能更新并提及额度重置。',
       chatgptUpdates: ['【模拟】此条仅用于展示摘要格式。'],
       reset: { evidence: 'Limits reset tomorrow at 09:00 UTC.', whenText: 'tomorrow at 09:00', timeZoneText: 'UTC' } });
   }
-  const app = createApplication(config, { sources: new Map([['x', new FixtureSource(posts)]]),
+  for (const post of posts) if (post.id.endsWith(':fresh')) answers.set(post.id, answers.get(post.id.slice(0, -6))!);
+  const app = createApplication(config, { hasher: new Sha256Hasher(), sources: new Map([['x', new FixtureSource(posts)]]),
     analyzer: new FixtureAnalyzer(answers), notifications: channel, store, clock,
     rules: [new ResetRule()], digestRenderer: new TextDigestRenderer(), events: new ConsoleEvents() });
   console.log('模拟演示：虚构推文、固定时钟、内存存储、邮件预览；没有外部请求。');
