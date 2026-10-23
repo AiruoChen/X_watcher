@@ -6,7 +6,7 @@ export class DeliverNotifications {
 
   async execute(): Promise<readonly { id: string; result: DeliveryResult }[]> {
     const results: { id: string; result: DeliveryResult }[] = [];
-    for (const entry of this.store.outbox()) {
+    for (const entry of this.store.pendingNotifications(100)) {
       if (entry.state !== 'pending') continue;
       const message = this.store.claimDelivery(entry.notification.id, (this.clock?.now() ?? new Date()).toISOString());
       if (!message) continue;

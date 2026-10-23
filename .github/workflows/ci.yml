@@ -21,3 +21,4 @@ jobs:
       - run: npm run check
       - run: npm test
       - run: npm run demo
+      - run: npm run storage:demo

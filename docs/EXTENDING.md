@@ -20,7 +20,7 @@
 
 ## 添加持久化存储
 
-实现 `WatchStore`，复用内存实现的合同测试：checkpoint/posts/outbox 原子提交、revision 冲突无部分写入、读取不泄露可变引用、claim 互斥、发送状态恢复。然后实现持久化专用的重启、迁移、损坏、跨进程竞争测试。数据库事务只做同步操作。
+现有 `SqliteStore` 已实现 `WatchStore`。新增数据库时复用同一套合同测试：checkpoint/posts/outbox 原子提交、revision 冲突无部分写入、读取不泄露可变引用、claim 互斥、发送状态恢复。SQLite 的重启、迁移、损坏和跨进程测试位于 tests/persistence.test.ts；新增适配器也需覆盖这些场景。数据库事务只做同步操作。
 
 ## 接入生产运行
 

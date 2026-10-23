@@ -85,6 +85,15 @@ export class MemoryStore implements WatchStore {
     }
     return count;
   }
+  pendingNotifications(limit: number): readonly OutboxEntry[] {
+    if (!Number.isInteger(limit) || limit < 1 || limit > 1000) throw new Error('Invalid page limit.');
+    return this.outbox().filter(entry => entry.state === 'pending').slice(0, limit);
+  }
+  pendingAnalysisJobs(targetId: string, now: string, limit: number): readonly AnalysisJob[] {
+    if (!isInstant(now) || !Number.isInteger(limit) || limit < 1 || limit > 1000) throw new Error('Invalid queue query.');
+    return this.analysisJobs(targetId).filter(job => (job.state === 'pending' || job.state === 'retry_wait')
+      && (job.nextAttemptAt === null || Date.parse(job.nextAttemptAt) <= Date.parse(now))).slice(0, limit);
+  }
   registerTarget(target: TargetIdentity): TargetIdentity {
     const old = this.identities.get(target.id);
     if (old) {
@@ -139,6 +148,13 @@ export class MemoryStore implements WatchStore {
   }
   coverage(targetId: string): readonly Coverage[] { return structuredClone([...this.ranges.values()].filter(r => r.targetId === targetId)); }
   isCovered(targetId: string, query: SourceQuery): boolean { return covers(this.coverage(targetId), targetId, query); }
+  postVersion(key: string): PostVersion | null { return structuredClone(this.raw.get(key) ?? null); }
+  hasPostVersion(key: string): boolean { return this.raw.has(key); }
+  latestVersions(targetId: string, query: SourceQuery): readonly PostVersion[] {
+    const latest = new Map<string, PostVersion>();
+    for (const post of this.raw.values()) if (post.targetId === targetId) latest.set(post.id, post);
+    return structuredClone([...latest.values()].filter(p => Date.parse(p.publishedAt) >= Date.parse(query.from) && Date.parse(p.publishedAt) < Date.parse(query.to)));
+  }
   versions(targetId: string): readonly PostVersion[] { return structuredClone([...this.raw.values()].filter(p => p.targetId === targetId)); }
   analysisJobs(targetId: string): readonly AnalysisJob[] { return structuredClone([...this.jobs.values()].filter(j => j.targetId === targetId)); }
   claimAnalysis(id: string, now: string): AnalysisJob | null {

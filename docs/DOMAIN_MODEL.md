@@ -1,4 +1,6 @@
-# 领域模型与端口（B01）
+# 领域模型与端口（B01 基线）
+
+B02 已提供真实 SQLite、运行执行权、备份与合同验证；当前落地情况见 [持久化说明](PERSISTENCE.md)。下文以领域设计为主。
 
 `src/domain/model.ts` 与 `ports.ts` 是兼容导出入口。领域模型拆入 `models/`，策略在 `policies/`，工作流存储合同位于 `ports/store.ts`。领域层无 Node 或供应商依赖。
 
@@ -12,7 +14,7 @@
 | RuleEvent | 帖子版本与规则版本绑定的唯一事件 |
 | DigestReport | 日期/时区、来源版本集合、状态、配置版本和内容哈希 |
 | Notification / DeliveryAttempt | 不可变内容和收件人、每次提交、供应商结果，与报告状态独立 |
-| RuntimeOwnership / AuditRecord | 后续宿主执行权与人工操作审计的数据合同，B02/B03/B06 才落实操作 |
+| RuntimeOwnership / AuditRecord | 执行权与审计数据合同；B02 已实现数据库租约/领取者围栏，宿主编排和人工核对在 B03/B06 |
 
 ## 状态与校验
 
@@ -31,10 +33,10 @@
 3. `createReportWithNotification`：来源集合/报告/通知一起创建；重复不覆盖旧收件人或正文。
 4. `claimDelivery/finishDelivery`：唯一 attempt 区分提交前后；未知结果不能变回 pending。
 
-内存存储返回深拷贝；输入冲突或无效时不部分发布状态。旧 `commitPoll` 标为 deprecated，仅用于过渡。共享合同测试是下一阶段 SQLite 的基线。
+内存存储返回深拷贝；输入冲突或无效时不部分发布状态。旧 `commitPoll` 标为 deprecated，仅用于过渡。共享合同测试已同时通过 MemoryStore 和 SQLiteStore。
 
 ## 当前运行边界
 
 所有外部来源/分析/通知仍是模拟。示例来源按请求区间给出完整批次；v0.1 的 Post 只有基础字段，所以 B01 以规范化文本/时间/URL 的哈希作为模拟版本。真实来源版本、编辑/删除/截断上下文的映射在 B04 实现，不将模拟作者 ID 当真实 ID。
 
-单次 demo 连接各阶段；常驻独立调度、跨进程执行权、停止恢复和全局重试唤醒仍属于 B02/B03。RuntimeOwnership/AuditRecord 只是数据模型，不能据此宣称已获得跨进程互斥。
+单次 demo 连接各阶段；常驻独立调度、跨进程执行权、停止恢复和全局重试唤醒仍属于 B02/B03。B02 的 SQLite 租约与领取者围栏已验证跨进程互斥；运行宿主仍须在 B03 显式组装和续租，不能仅凭构造 Store 就宣称后台服务已获得执行权。

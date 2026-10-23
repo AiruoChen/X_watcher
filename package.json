@@ -1,6 +1,6 @@
 {
   "name": "x-watcher",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
   "description": "Modular X monitoring agent: daily digests and reset alerts",
@@ -10,10 +10,12 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "check": "tsc -p tsconfig.json --noEmit && node scripts/check-boundaries.mjs",
-    "test": "npm run build && node --test dist/tests/*.test.js",
+    "test": "npm run build && node --experimental-sqlite --test dist/tests/*.test.js",
     "demo": "npm run build && node dist/src/cli.js demo",
     "start": "npm run build && node --env-file-if-exists=.env dist/src/cli.js run",
-    "config:check": "npm run build && node --env-file-if-exists=.env dist/src/cli.js config"
+    "config:check": "npm run build && node --env-file-if-exists=.env dist/src/cli.js config",
+    "storage:demo": "npm run build && node --experimental-sqlite dist/src/storage-demo.js",
+    "storage:bench": "npm run build && node --experimental-sqlite dist/src/storage-benchmark.js"
   },
   "devDependencies": {
     "@types/node": "22.20.5",
