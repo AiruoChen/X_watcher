@@ -6,7 +6,8 @@ export function loadConfig(env: NodeJS.ProcessEnv): RuntimeConfig {
   const input = Object.fromEntries(Object.keys(CONFIG_SCHEMA).filter(key => env[key] !== undefined).map(key => [key, env[key]]));
   const config = parseConfig(input);
   if (config.mode !== 'demo') {
-    const services = config.mode === 'live' ? Object.values(config.services) : [config.services.source, config.services.analysis];
+    const services = config.mode === 'live' ? Object.values(config.services)
+      : config.services.analysis.provider === 'deferred' ? [config.services.source] : [config.services.source, config.services.analysis];
     for (const service of services) {
       if (!service.credentialEnv || !env[service.credentialEnv]?.trim()) throw new ConfigError('credential environment');
     }

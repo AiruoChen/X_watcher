@@ -1,5 +1,9 @@
 # 架构
 
+当前 v0.5/B04：`bootstrap-x.ts` 只在显式 preview 中从环境变量创建官方 XClient / XSource；`ResolveTarget` 在抓取前比对持久作者 ID，`IngestTarget` 原子提交带来源范围的帖子与分析待办。`x:probe` 不依赖存储，`x:preview` 复用 RuntimeHost，只运行抓取阶段；分析、日报和投递关闭。后文按版本保留历史设计，当前操作及实际账号未验证项见 [X 接入说明](integrations/x.md)。
+
+XClient 负责固定来源 GET、HTTP 期限、大小限制、禁止重定向和共享限流门；schemas/mapper 先校验 unknown，正文与引用上下文分离。来源错误通过领域 SourceFailure 交给调度器，保存 failureCode / retryNotBeforeAt，运行层没有导入 HTTP 或 X SDK。Post.origin、Coverage.scope 和调度错误元数据都是既有 SQLite JSON 的可选增量，schema 仍为 3。
+
 本文前半部分保留 v0.1 历史设计；B01 的已实现变更见末节与 [领域模型说明](DOMAIN_MODEL.md)。业务规则以 [需求文档](REQUIREMENTS.md) 为准，代码实施顺序见 [开发计划](DEVELOPMENT_PLAN.md)。
 
 使用端口与适配器组织单个 TypeScript 项目。现在不拆微服务、不引入插件动态加载；接口是扩展点，组合根负责选用实现。

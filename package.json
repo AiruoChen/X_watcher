@@ -1,6 +1,6 @@
 {
   "name": "x-watcher",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "private": true,
   "type": "module",
   "description": "Modular X monitoring agent: daily digests and reset alerts",
@@ -17,7 +17,9 @@
     "storage:demo": "npm run build && node --experimental-sqlite dist/src/storage-demo.js",
     "storage:bench": "npm run build && node --experimental-sqlite dist/src/storage-benchmark.js",
     "watch": "npm run build && node --experimental-sqlite --env-file-if-exists=.env dist/src/cli.js watch",
-    "runtime:demo": "npm run build && node --experimental-sqlite dist/src/runtime-demo.js"
+    "runtime:demo": "npm run build && node --experimental-sqlite dist/src/runtime-demo.js",
+    "x:probe": "npm run build && node --experimental-sqlite --env-file-if-exists=.env dist/src/cli.js x:probe",
+    "x:preview": "npm run build && node --experimental-sqlite --env-file-if-exists=.env dist/src/cli.js x:preview"
   },
   "devDependencies": {
     "@types/node": "22.20.5",

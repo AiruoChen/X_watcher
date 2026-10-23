@@ -1,7 +1,7 @@
 # X_watcher 开发约定
 
 - Node.js 22.12+、TypeScript strict、ESM；优先内置库。
-- 按 docs/REQUIREMENTS.md 的业务规则与 docs/DEVELOPMENT_PLAN.md 的依赖顺序分块实现，docs/ROADMAP.md 仅记录实际完成度；SQLite 为真实本地持久化，外部服务仍为模拟。
+- 按 docs/REQUIREMENTS.md 的业务规则与 docs/DEVELOPMENT_PLAN.md 的依赖顺序分块实现，docs/ROADMAP.md 仅记录实际完成度；SQLite 为真实本地持久化，X 可显式只读 preview，模型/邮件仍未真实接入。demo/test/CI 不访问真实服务。
 - domain 定义模型与端口；application 编排业务；adapters 实现外部协议；runtime 只依赖 domain。
 - 依赖在 bootstrap 中注入。新增来源、分析器、通知渠道和规则优先实现已有接口。
 - 配置通过校验后再使用；账户、收件人、模型与密钥不得写在业务逻辑中。

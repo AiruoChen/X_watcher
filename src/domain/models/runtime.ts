@@ -28,4 +28,6 @@ export interface ScheduledTask {
   readonly failures: number;
   readonly startedAt: string | null;
   readonly finishedAt: string | null;
+  readonly failureCode?: string | null;
+  readonly retryNotBeforeAt?: string | null;
 }

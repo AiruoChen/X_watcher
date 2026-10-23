@@ -2,6 +2,7 @@ import type { Clock, EventSink, ExecutionContext, RuntimeJobs, RuntimeState } fr
 import type { RuntimeConfig, ScheduledTask } from '../domain/model.js';
 import { stableId } from '../domain/identifiers.js';
 import { retryDelay } from '../domain/policies/retry.js';
+import { SourceFailure } from '../domain/errors.js';
 
 /** Persistent stages, with a separate concurrency allowance for each stage. No SDKs or timers. */
 export class WorkflowScheduler {
@@ -46,8 +47,10 @@ export class WorkflowScheduler {
       let deadline = this.deadlines.get(task.id);
       if (deadline?.revision !== task.revision) {
         // On restart, cap future waits: a backwards wall-clock correction cannot suspend polling for days.
-        const wait = Math.min(Math.max(0, Date.parse(task.dueAt) - this.clock.now().getTime()),
+        const bounded = Math.min(Math.max(0, Date.parse(task.dueAt) - this.clock.now().getTime()),
           Math.max(this.interval(task), this.config.retry.maxDelayMs));
+        const serverWait = task.retryNotBeforeAt ? Date.parse(task.retryNotBeforeAt) - this.clock.now().getTime() : 0;
+        const wait = Math.max(bounded, serverWait);
         deadline = { revision: task.revision, at: this.clock.monotonicMs() + wait }; this.deadlines.set(task.id, deadline);
       }
       if (this.clock.monotonicMs() < deadline.at) continue;
@@ -60,7 +63,7 @@ export class WorkflowScheduler {
     if (tasks.length) this.cursor = (start + 1) % tasks.length;
   }
   private async execute(task: ScheduledTask, context: ExecutionContext): Promise<void> {
-    let failed = false;
+    let failed = false; let sourceFailure: SourceFailure | undefined;
     try {
       context.signal.throwIfAborted();
       const target = this.config.targets.find(item => item.id === task.targetId);
@@ -72,16 +75,19 @@ export class WorkflowScheduler {
         if (this.digestEmails >= this.config.policy.maxCatchUpEmailsPerCycle) break;
         if (this.jobs.digest(target, window)) this.digestEmails++;
       }
-    } catch {
+    } catch (error) {
       failed = true;
+      if (error instanceof SourceFailure) sourceFailure = error;
       try { this.events.record({ type: 'cycle.failed', stage: task.stage }); } catch { /* State is authoritative. */ }
     }
     const retry = failed ? retryDelay(this.config.retry, task.failures + 1, this.random()) : null;
     // Analysis jobs own their retry exhaustion; their scheduler must continue serving new jobs.
-    const exhausted = failed && task.stage === 'ingest' && retry === null;
+    const exhausted = failed && task.stage === 'ingest' && (retry === null || sourceFailure?.retryable === false);
     const delay = failed && task.stage !== 'analysis' ? retry ?? this.config.retry.maxDelayMs : this.interval(task);
     const now = this.clock.now().toISOString();
-    this.state.finish(task.id, task.revision, new Date(Date.parse(now) + delay).toISOString(), failed, exhausted, now);
-    this.deadlines.set(task.id, { revision: task.revision + 1, at: this.clock.monotonicMs() + delay });
+    const effectiveDelay = Math.max(delay, sourceFailure?.retryAt ? Date.parse(sourceFailure.retryAt) - Date.parse(now) : 0);
+    this.state.finish(task.id, task.revision, new Date(Date.parse(now) + effectiveDelay).toISOString(), failed, exhausted, now,
+      sourceFailure ? { code: sourceFailure.code, retryAt: sourceFailure.retryAt } : undefined);
+    this.deadlines.set(task.id, { revision: task.revision + 1, at: this.clock.monotonicMs() + effectiveDelay });
   }
 }
