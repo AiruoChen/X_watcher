@@ -23,7 +23,9 @@ console.log(describeConfig(custom)); // 不含邮箱、发件人、路径和密�
 | 目标 | WATCH_HANDLES | thsottiaux；逗号分隔，不允许空项或大小写重复 |
 | 时间 | POLL_INTERVAL_MINUTES / TIME_ZONE / DAILY_DIGEST_AT | 30 / Asia/Shanghai / 08:00；HH:mm 严格格式 |
 | 收件人 | NOTIFICATION_TO | demo 为保留域占位地址；live 必须显式填写真实地址 |
-| 存储 | STORAGE_KIND / DATABASE_PATH | memory / data/x-watcher.sqlite；外部模式要求 sqlite，但适配器已在 B02 实现，常驻启动组装在 B03 |
+| 存储 | STORAGE_KIND / DATABASE_PATH | memory / data/x-watcher.sqlite；常驻 watch 要求 sqlite，需显式创建新库 |
+| 运行 | RUNTIME_WAKE_MS / RUNTIME_LEASE_SECONDS / RUNTIME_SHUTDOWN_SECONDS | 1000 / 60 / 15；唤醒 10–10000ms、租约 3–3600s、停止宽限 1–300s；租约至少 3 倍唤醒间隔 |
+| 并发 | RUNTIME_MAX_CONCURRENT / RUNTIME_BATCH_SIZE | 8 / 50；4–100 / 1–1000；四阶段各最多 floor(并发/4) 个任务 |
 | 首次与提醒 | INITIAL_BACKFILL_DAYS / RESET_MAX_AGE_HOURS | 1 / 24 |
 | 日报 | DIGEST_CATCH_UP_DAYS / MAX_CATCH_UP_EMAILS / DIGEST_GRACE_MINUTES | 7 / 3 / 15 |
 | 健康 | FAILURE_THRESHOLD / STALE_AFTER_MINUTES | 3 / 90 |
@@ -44,6 +46,8 @@ preview 要求来源/分析供应商、型号、凭据引用与 SQLite 配置；
 
 B01 已消费：目标、时区、日报时间、初始回溯、提醒最大时效、分析器/提示版本、分析重试及配置快照。
 
-B01 仅声明并校验：补报/宽限/事故阈值、外部超时、真实服务、生产启动组装、预算和自动清理。这些执行能力分别在 B02–B09 完成；设置字段不会提前启用它们。
+B03 已消费：运行参数、分阶段退避、每次外部调用超时、有限日期追赶与每轮摘要邮件上限。单调时间用于等待和本进程执行权，墙钟用于持久化期限和日历窗口。
+
+仍仅声明并校验：日报宽限/降级、事故阈值、真实服务、预算和自动清理。这些执行能力在 B04–B09 完成；设置字段不会提前启用它们。
 
 demo 与 CI 不读取真实凭据去调用外部服务。收件人仅出现在本地配置/不可变通知中，`describeConfig` 与常规事件不输出它。

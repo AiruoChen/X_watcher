@@ -19,6 +19,7 @@ export interface AnalysisCommit {
 }
 /** Synchronous transaction contracts; clone inputs/outputs and reject inconsistent identities. */
 export interface WorkflowStore {
+  /** Reset/correction first; stable FIFO within each priority. Apply the limit after ordering. */
   pendingNotifications(limit: number): readonly import('../model.js').OutboxEntry[];
   pendingAnalysisJobs(targetId: string, now: string, limit: number): readonly AnalysisJob[];
   registerTarget(target: TargetIdentity): TargetIdentity;

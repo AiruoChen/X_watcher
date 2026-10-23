@@ -29,6 +29,10 @@ CREATE INDEX results_post ON analysis_results(post_key,seq DESC);
 CREATE INDEX events_target ON rule_events(target_id,seq);
 CREATE INDEX notification_state ON notifications(state,seq);
 CREATE INDEX attempts_notification ON delivery_attempts(notification_id,seq);
+` }, { version: 3, sql: `
+CREATE TABLE runtime_tasks(id TEXT PRIMARY KEY, revision INTEGER NOT NULL CHECK(revision>=0), state TEXT NOT NULL CHECK(state IN ('idle','running','needs_attention')), due_ms INTEGER NOT NULL, payload TEXT NOT NULL CHECK(json_valid(payload))) STRICT;
+CREATE INDEX runtime_task_due ON runtime_tasks(state,due_ms);
+CREATE INDEX notification_priority ON notifications(state,(CASE WHEN json_extract(payload,'$.kind') IN ('reset','correction') THEN 0 ELSE 1 END),seq);
 ` }];
 export const SCHEMA_VERSION = MIGRATIONS.length;
 const checksum = (sql: string): string => createHash('sha256').update(sql).digest('hex');

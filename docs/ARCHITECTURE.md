@@ -76,3 +76,23 @@ B01 已更新领域合同与内存参考实现，B02 再实现 SQLite；不要�
 SQLiteStore 已复用工作流端口和共享合同测试，逐记录保存领域快照并使用日期/状态/唯一键索引。完整迁移、运行执行权、领取者围栏、显式隔离恢复、备份/恢复与容量测量见 [PERSISTENCE.md](PERSISTENCE.md)。
 
 运行宿主尚未接入；模块操作不能等同于生产监测已启动。正常用例增加 postVersion/hasPostVersion/latestVersions、待分析和待通知分页，不再读取全部历史记录。数据库与内存实现都保留同样的端口语义。
+
+## B03 已实现的调度与运行（v0.4）
+
+以上 B02 状态为历史记录。当前 `createRuntimeApplication` 组装分阶段用例与 RuntimeHost，Schema 3 保存调度记录；运行层只依赖领域端口，适配器负责 SQLite、计时和调用期限。兼容演示继续使用旧 Scheduler，前台常驻入口使用 WorkflowScheduler。
+
+```mermaid
+flowchart LR
+  Host[RuntimeHost / lease heartbeat] --> Scheduler[WorkflowScheduler]
+  Scheduler --> State[RuntimeState / SQLite]
+  Scheduler --> Ingest[IngestTarget]
+  Scheduler --> Analysis[ProcessAnalysis]
+  Scheduler --> Delivery[DeliverNotifications]
+  Scheduler --> Digest[DueDigests / DailyDigest]
+  Ingest --> Store[WatchStore / persistent jobs]
+  Analysis --> Store
+  Delivery --> Store
+  Digest --> Store
+```
+
+阶段只通过持久化待办连接，分别保留并发额度。同一目标同阶段使用 revision 互斥。宿主先取得执行权，再隔离其他 worker 的未决领取，最后恢复遗留阶段标记；未知发送始终不重新排队。停止先禁止阶段及批次内新领取，宽限后取消调用，写入结果再释放；失败保留租约和未决记录。墙钟决定自然日，单调时间决定间隔和本进程租约有效期。详细时序、退出码、配置、恢复边界与测试见 [运行说明](RUNTIME.md)。

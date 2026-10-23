@@ -18,5 +18,11 @@ export function inspectDatabase(db: DatabaseSync): number {
     if (!db.prepare("SELECT 1 FROM sqlite_master WHERE type='index' AND name=?").get(index)) throw new Error('Missing database index.');
   }
   if (!db.prepare('SELECT 1 FROM runtime_ownership WHERE singleton=1').get()) throw new Error('Missing runtime ownership record.');
+  if (version >= 3) {
+    db.prepare('SELECT revision,state,due_ms,payload FROM runtime_tasks LIMIT 0').all();
+    for (const index of ['runtime_task_due', 'notification_priority']) {
+      if (!db.prepare("SELECT 1 FROM sqlite_master WHERE type='index' AND name=?").get(index)) throw new Error('Missing runtime index.');
+    }
+  }
   return version;
 }

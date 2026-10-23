@@ -25,6 +25,7 @@ export class RuntimeClaims implements RuntimeLeaseControl {
   private readonly pid: number;
   private readonly probe: (pid: number) => boolean | null;
   private heldRevision: number | null = null;
+  private heldUntilMonotonic = -Infinity;
   constructor(private readonly db: DatabaseSync, options: ClaimsOptions = {}) {
     this.clock = options.clock ?? new SystemClock(); this.hostId = options.hostId ?? hostname();
     this.ownerId = options.ownerId ?? randomUUID(); this.pid = options.pid ?? process.pid; this.probe = options.isProcessAlive ?? alive;
@@ -52,13 +53,13 @@ export class RuntimeClaims implements RuntimeLeaseControl {
       this.db.prepare('UPDATE runtime_ownership SET revision=?,payload=? WHERE singleton=1').run(lease.revision, JSON.stringify(lease));
       this.audit('acquire_runtime', lease.revision); return lease;
     });
-    if (acquired) this.heldRevision = acquired.revision;
+    if (acquired) { this.heldRevision = acquired.revision; this.heldUntilMonotonic = this.clock.monotonicMs() + leaseMs; }
     return acquired;
   }
-  assertWriteAuthority(now: string): void {
+  assertWriteAuthority(_now: string): void {
     const lease = this.current();
     if (!lease && this.heldRevision === null) return; // Explicit standalone storage operations before a host exists.
-    if (!lease || lease.ownerId !== this.ownerId || lease.revision !== this.heldRevision || Date.parse(lease.leaseUntil) <= Date.parse(now))
+    if (!lease || lease.ownerId !== this.ownerId || lease.revision !== this.heldRevision || this.clock.monotonicMs() >= this.heldUntilMonotonic)
       throw new Error('Database execution right is owned elsewhere or expired.');
   }
   assertOwned(expectedRevision: number): RuntimeLease {
@@ -74,13 +75,14 @@ export class RuntimeClaims implements RuntimeLeaseControl {
       this.db.prepare('UPDATE runtime_ownership SET revision=?,payload=? WHERE singleton=1').run(lease.revision, JSON.stringify(lease));
       return lease;
     });
-    this.heldRevision = renewed.revision; return renewed;
+    this.heldRevision = renewed.revision; this.heldUntilMonotonic = this.clock.monotonicMs() + leaseMs; return renewed;
   }
   release(expectedRevision: number): void {
     transaction(this.db, () => {
       const lease = this.assertOwned(expectedRevision);
       if (this.db.prepare("SELECT 1 FROM analysis_jobs WHERE state='processing' LIMIT 1").get()
-        || this.db.prepare("SELECT 1 FROM notifications WHERE state='sending' LIMIT 1").get()) throw new Error('In-flight work must be settled before releasing ownership.');
+        || this.db.prepare("SELECT 1 FROM notifications WHERE state='sending' LIMIT 1").get()
+        || this.db.prepare("SELECT 1 FROM runtime_tasks WHERE state='running' LIMIT 1").get()) throw new Error('In-flight work must be settled before releasing ownership.');
       this.db.prepare('UPDATE runtime_ownership SET revision=?,payload=NULL WHERE singleton=1').run(lease.revision + 1);
       this.audit('release_runtime', lease.revision);
     });
