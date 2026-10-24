@@ -1,7 +1,10 @@
 import type { DeliveryBinding, DeliveryRecord, DeliveryResolution, MailAudit } from '../../domain/model.js';
+import { deliveryOutcome } from '../../domain/policies/mail-retry.js';
 import { resolvedDeliveryState, validateBinding } from '../../domain/policies/mail.js';
 import type { AnalysisCommit, IngestionCommit, PollCommit, WatchStore } from '../../domain/ports.js';
 import type { AnalysisJob, AnalysisResult, AnalyzedPost, Checkpoint, Coverage, DeliveryAttempt, DeliveryClaim, DeliveryResult, DigestReport, DigestWindow, Notification, OutboxEntry, PostVersion, RuleEvent, SourceQuery, TargetIdentity } from '../../domain/model.js';
+import type { SemanticAnalysis } from '../../domain/model.js';
+import { correctionBasis, validateCorrectionLink } from '../../domain/policies/correction.js';
 import { validateReanalysis } from '../../domain/policies/reanalysis.js';
 import { RevisionConflictError } from '../../domain/errors.js';
 import { isInstant } from '../../domain/time.js';
@@ -39,7 +42,7 @@ export class MemoryStore implements WatchStore {
     const savedAudit: MailAudit = structuredClone({ ...command, kind: 'mail_resolution', resultingState: state });
     const result = state === 'pending' ? null : command.receipt?.providerId
       ? { status: 'accepted' as const, providerId: command.receipt.providerId } : record.entry.result;
-    this.messages.set(command.notificationId, { ...record.entry, state, result });
+    this.messages.set(command.notificationId, { notification: record.entry.notification, state, result });
     this.mailRevisions.set(command.notificationId, record.revision + 1);
     this.mailAuditData.push(savedAudit);
     return this.deliveryRecord(command.notificationId)!;
@@ -110,10 +113,12 @@ export class MemoryStore implements WatchStore {
     }
     return count;
   }
-  pendingNotifications(limit: number): readonly OutboxEntry[] {
-    if (!Number.isInteger(limit) || limit < 1 || limit > 1000) throw new Error('Invalid page limit.');
+  pendingNotifications(limit: number, now?: string): readonly OutboxEntry[] {
+    if (!Number.isInteger(limit) || limit < 1 || limit > 1000 || (now !== undefined && !isInstant(now))) throw new Error('Invalid queue query.');
     const priority = (entry: OutboxEntry): number => ['reset', 'correction'].includes(entry.notification.kind) ? 0 : 1;
-    return this.outbox().filter(entry => entry.state === 'pending').sort((a, b) => priority(a) - priority(b)).slice(0, limit);
+    return this.outbox().filter(entry => entry.state === 'pending' || (entry.state === 'retry_wait' && now !== undefined
+      && entry.nextAttemptAt !== undefined && Date.parse(entry.nextAttemptAt) <= Date.parse(now)))
+      .sort((a, b) => priority(a) - priority(b)).slice(0, limit);
   }
   pendingAnalysisJobs(targetId: string, now: string, limit: number): readonly AnalysisJob[] {
     if (!isInstant(now) || !Number.isInteger(limit) || limit < 1 || limit > 1000) throw new Error('Invalid queue query.');
@@ -175,6 +180,11 @@ export class MemoryStore implements WatchStore {
   coverage(targetId: string): readonly Coverage[] { return structuredClone([...this.ranges.values()].filter(r => r.targetId === targetId)); }
   isCovered(targetId: string, query: SourceQuery): boolean { return covers(this.coverage(targetId), targetId, query); }
   postVersion(key: string): PostVersion | null { return structuredClone(this.raw.get(key) ?? null); }
+  previousPostVersion(postKey: string, explicitPostId: string | null): PostVersion | null {
+    const all = [...this.raw.values()], index = all.findIndex(p => p.key === postKey), current = all[index];
+    if (!current) return null;
+    return structuredClone(all.slice(0, index).reverse().find(p => correctionBasis(current, p, explicitPostId) !== null) ?? null);
+  }
   hasPostVersion(key: string): boolean { return this.raw.has(key); }
   latestVersions(targetId: string, query: SourceQuery): readonly PostVersion[] {
     const latest = new Map<string, PostVersion>();
@@ -214,14 +224,19 @@ export class MemoryStore implements WatchStore {
     if (result.jobId !== job.id || result.postKey !== job.postKey || result.analyzerVersion !== job.analyzerVersion
       || result.promptVersion !== job.promptVersion || !isInstant(result.completedAt)) throw new Error('Analysis identity mismatch.');
     validateAnalysis(post, result.analysis);
+    const semantic = result.analysis as Partial<SemanticAnalysis>;
+    if (Object.hasOwn(semantic, 'correctionLink'))
+      validateCorrectionLink(post, result.analysis, this.previousPostVersion(post.key, semantic.resetDetails?.previousPostId ?? null));
     const savedResult = structuredClone(result);
     const events = structuredClone(this.events), messages = structuredClone(this.messages);
     for (const event of commit.events) {
+      if ((event.supersedesPostKey ?? null) !== (semantic.correctionLink?.postKey ?? null)) throw new Error('Invalid correction event link.');
       if (event.jobId !== job.id || event.targetId !== job.targetId || event.postKey !== job.postKey
         || event.id !== stableId('event', job.postKey, event.ruleId, event.ruleVersion)) throw new Error('Rule event identity mismatch.');
       if (!events.has(event.id)) events.set(event.id, structuredClone(event));
     }
     for (const message of commit.notifications) {
+      if ((message.supersedesPostKey ?? null) !== (semantic.correctionLink?.postKey ?? null)) throw new Error('Invalid correction notification link.');
       if (!job.emitNotifications || message.targetId !== job.targetId || !commit.events.some(e => e.id === message.originId))
         throw new Error('Invalid notification origin or replay.');
       if (messages.has(message.id) && messages.get(message.id)!.notification.originId !== message.originId) throw new Error('Notification identity collision.');
@@ -257,8 +272,9 @@ export class MemoryStore implements WatchStore {
   reports(targetId: string): readonly DigestReport[] { return structuredClone([...this.reportData.values()].filter(r => r.targetId === targetId)); }
   claimDelivery(id: string, now: string, proposedBinding?: DeliveryBinding): DeliveryClaim | null {
     const entry = this.messages.get(id);
-    if (!entry || entry.state !== 'pending') return null;
     if (!isInstant(now)) throw new Error('Invalid delivery time.');
+    if (!entry || (entry.state !== 'pending' && !(entry.state === 'retry_wait' && entry.nextAttemptAt !== undefined
+      && Date.parse(entry.nextAttemptAt) <= Date.parse(now)))) return null;
     const number = [...this.attempts.values()].filter(a => a.notificationId === id).length + 1;
     const previous = this.deliveryRecord(id)!;
     const binding = previous.attempt ? previous.attempt.binding : proposedBinding;
@@ -268,16 +284,17 @@ export class MemoryStore implements WatchStore {
     const attemptId = stableId('attempt', id, String(number));
     this.attempts.set(attemptId, { id: attemptId, notificationId: id, number, startedAt: now, finishedAt: null, result: null, ...savedBinding });
     this.mailRevisions.set(id, previous.revision + 1);
-    this.messages.set(id, { ...entry, state: transitionDelivery(entry.state, 'sending') });
+    this.messages.set(id, { notification: entry.notification, result: entry.result, state: transitionDelivery(entry.state, 'sending') });
     return structuredClone({ attemptId, notification: entry.notification, ...savedBinding });
   }
   finishDelivery(attemptId: string, result: DeliveryResult, now: string): void {
     const attempt = this.attempts.get(attemptId), entry = attempt ? this.messages.get(attempt.notificationId) : undefined;
     if (!attempt || !entry || attempt.result !== null || !isInstant(now)) throw new Error('Invalid delivery attempt.');
-    const state = transitionDelivery(entry.state, result.status === 'accepted' ? 'provider_accepted' : result.status === 'rejected' ? 'failed' : 'needs_attention');
+    const outcome = deliveryOutcome(attempt, result, now);
+    const state = transitionDelivery(entry.state, outcome.state);
     const copy = structuredClone(result);
     this.attempts.set(attemptId, { ...attempt, finishedAt: now, result: copy });
-    this.messages.set(attempt.notificationId, { ...entry, state, result: copy });
+    this.messages.set(attempt.notificationId, { notification: entry.notification, state, result: copy, ...(outcome.nextAttemptAt ? { nextAttemptAt: outcome.nextAttemptAt } : {}) });
     this.mailRevisions.set(attempt.notificationId, (this.mailRevisions.get(attempt.notificationId) ?? 0) + 1);
   }
   deliveryAttempts(): readonly DeliveryAttempt[] { return structuredClone([...this.attempts.values()]); }

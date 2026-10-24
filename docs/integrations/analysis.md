@@ -1,4 +1,4 @@
-# B05：分析与重置识别（v0.7）
+# B05：分析与重置识别（v0.7.1）
 
 已实现供应商无关接口、结构化解析、重置规则、版本化重分析与离线验证。用户选择暂不指定服务商，因此没有真实模型客户端、网络请求或真实准确率结论。现有 RSSHub source-only preview 仍只抓取。
 
@@ -21,9 +21,11 @@
 
 根对象必须恰好包含 `postId, summary, topics, updates, reset`。updates 分开记录 chatgpt/codex/api/other，以及 released/rolling_out/planned/speculation/discussion。仅 ChatGPT 条目进入兼容字段 chatgptUpdates，保留发布状态。
 
-reset 为 null 或包含 `kind, product, certainty, evidence, whenText, timeZoneText, audience, previousPostId` 的对象。讨论必须 uncertain；非额度产品不能产生提醒。证据、时间、人群、时区必须逐字出现在作者正文；更正 ID 必须出现在正文中，无法证明时留 null。更正产生新通知，不修改旧通知。此版本只展示原文关联 ID，不猜测本地旧事件。
+reset 为 null 或包含 `kind, product, certainty, evidence, whenText, timeZoneText, audience, previousPostId` 的对象。讨论必须 uncertain；非额度产品不能产生提醒。证据、时间、人群、时区必须逐字出现在作者正文；更正 ID 必须出现在正文或已验证的来源编辑历史中，无法证明时留 null。应用层通过 previousPostVersion 查找同来源/作者/目标的既存前驱：优先明确引用，其次编辑历史或同帖版本；禁止关联未来才入库的版本。correctionLink 保存旧 postKey、来源 ID、URL 和依据，事件及通知保存 supersedesPostKey。分析提交事务会重验关联，旧通知保持不变。原文未写旧 ID 时仍可从可信版本链建立关联；本地找不到旧版本就明确显示无法核对，不猜“最新帖子”。规则版本升至 v2。
 
-只有正文中逐字出现、日历有效、带明确偏移的 ISO 日期时间才能自动转换为北京时间。tomorrow、今晚、周五、PST 或缺日期的午夜原样保留，标准化时间为 null。自然语言确定时间的更广泛解析留作独立扩展，不能让模型凭空计算。
+时间转换使用 domain/policies/reset-time.ts 的确定性语法：支持带偏移的 ISO、完整年月日数字日期、中英文月份日期、24 小时制/AM-PM/中文时刻，配合原文明确的 UTC/GMT、数值偏移、北京时间或 IANA 时区。例如 `3 January 2026 at 09:00 UTC` 转为北京时间 17:00，`2026年1月3日下午3点30分 北京时间` 转为 UTC 07:30。日期与时区证据可以分别引用，冲突则不转换。
+
+不使用系统默认时区或 Date.parse 的自然语言猜测。IANA 时区通过本地钟面反查：夏令时重复时刻和不存在的时刻保持未知；tomorrow、今晚、周五、PST、缺日期/时区或 03/04 这类歧义日期仍为 null。模型不能提供自算的 normalizedAt，存储校验会从原文重新计算。
 
 证据包含于正文只能证明引用真实，不能证明分类正确；真实模型仍需评估。当前提示不授予模型工具、环境变量、收件配置或执行权限。
 

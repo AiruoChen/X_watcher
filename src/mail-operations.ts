@@ -16,6 +16,7 @@ export function mailOperations(config: RuntimeConfig, command: string, args: rea
     }
     const record = store.deliveryRecord(id); if (!record) throw new Error('Unknown notification.');
     console.log(JSON.stringify({ id, state: record.entry.state, revision: record.revision,
+      nextAttemptAt: record.entry.nextAttemptAt ?? null,
       attemptId: record.attempt?.id ?? null, attempts: record.attempt?.number ?? 0,
       provider: record.attempt?.binding?.provider ?? null, auditCount: store.mailAudits(id).length }));
   } finally { store.close(); }

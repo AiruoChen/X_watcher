@@ -21,7 +21,7 @@ export interface AnalysisCommit {
 /** Synchronous transaction contracts; clone inputs/outputs and reject inconsistent identities. */
 export interface WorkflowStore {
   /** Reset/correction first; stable FIFO within each priority. Apply the limit after ordering. */
-  pendingNotifications(limit: number): readonly import('../model.js').OutboxEntry[];
+  pendingNotifications(limit: number, now?: string): readonly import('../model.js').OutboxEntry[];
   pendingAnalysisJobs(targetId: string, now: string, limit: number): readonly AnalysisJob[];
   registerTarget(target: TargetIdentity): TargetIdentity;
   target(id: string): TargetIdentity | null;
@@ -30,6 +30,7 @@ export interface WorkflowStore {
   coverage(targetId: string): readonly Coverage[];
   isCovered(targetId: string, query: SourceQuery): boolean;
   postVersion(key: string): PostVersion | null;
+  previousPostVersion(postKey: string, explicitPostId: string | null): PostVersion | null;
   hasPostVersion(key: string): boolean;
   latestVersions(targetId: string, query: SourceQuery): readonly PostVersion[];
   versions(targetId: string): readonly PostVersion[];

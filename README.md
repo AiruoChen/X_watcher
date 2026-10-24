@@ -2,7 +2,7 @@
 
 一个可扩展的 X 推文监测 agent 框架。首个场景是关注 `@thsottiaux`：每半小时读取新推文，发现重置相关信息后提醒，并在北京时间每天 **08:00** 整理前一天的内容与其中提到的 ChatGPT 更新。
 
-> **当前 v0.7 已完成 B05/B06 可配置接口和离线验证。** 包含结构化分析、重置证据/时间规则、邮件尝试、只读核对、人工处理及 SQLite schema 4。按你的选择，暂不指定模型或邮件服务商，不进行真实分析或发信。运行 `npm run modules:demo` 查看完整离线流程；接口见 [分析模块](docs/integrations/analysis.md) 和 [邮件模块](docs/integrations/mail.md)。
+> **当前 v0.7.1 已完成 B05/B06 可配置接口和离线验证，并修复需求审查问题。** 包含结构化分析、重置证据/时间规则、邮件尝试、只读核对、人工处理及 SQLite schema 5；支持明确中英文日期转换、可信旧版本关联、确定公告分项评估和明确未接收时的自动退避重试。按你的选择，暂不指定模型或邮件服务商，不进行真实分析或发信。运行 `npm run modules:demo` 查看完整离线流程；接口见 [分析模块](docs/integrations/analysis.md) 和 [邮件模块](docs/integrations/mail.md)。
 
 > **v0.6 已新增自托管 RSSHub 来源。** 推荐入口为 `rsshub:probe` / `rsshub:preview`；它读取有限 JSON Feed 快照并保存到 SQLite，不调用本项目的官方 X API。模型/邮件的真实客户端尚未接入；当前不会发送摘要或提醒。Docker 与真实 Cookie 联调尚未执行，配置与部署见 [RSSHub 指南](docs/integrations/rsshub.md)。
 

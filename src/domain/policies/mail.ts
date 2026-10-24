@@ -3,6 +3,9 @@ import { isInstant } from '../time.js';
 import { requireRevision } from './state.js';
 const invalid = (): never => { throw new Error('Invalid mail operation or evidence.'); };
 export function validateBinding(binding: DeliveryBinding): void {
+  if (binding.retryPolicy && (!Number.isSafeInteger(binding.retryPolicy.baseDelayMs) || binding.retryPolicy.baseDelayMs < 1
+    || !Number.isSafeInteger(binding.retryPolicy.maxDelayMs) || binding.retryPolicy.maxDelayMs < binding.retryPolicy.baseDelayMs
+    || binding.retryPolicy.maxDelayMs > 86400000)) invalid();
   if (![binding.provider, binding.account, binding.idempotencyKey].every(x => typeof x === 'string' && x.trim() && x.length <= 300 && !/[\r\n\0]/.test(x))
     || !/^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/.test(binding.from)
     || !Number.isSafeInteger(binding.maxAttempts) || binding.maxAttempts < 1 || binding.maxAttempts > 100
@@ -36,6 +39,7 @@ export function resolvedDeliveryState(record: DeliveryRecord, command: DeliveryR
     if (command.receipt.status === 'bounced') return 'bounced';
     return invalid(); // not_found never proves a failed send; no mutation from an inconclusive lookup.
   }
+  if (command.action === 'abandon' && state === 'retry_wait' && command.receipt === undefined) return 'failed';
   if (!['needs_attention','failed'].includes(state) || command.receipt !== undefined) return invalid();
   if (command.action === 'confirm_sent') return 'provider_accepted'; // Human confirmation is not a delivered receipt.
   if (command.action === 'abandon') return 'failed';

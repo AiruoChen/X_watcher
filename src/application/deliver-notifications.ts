@@ -10,10 +10,10 @@ export class DeliverNotifications {
     for (let count = 0; count < limit; count++) {
       if (context && (context.signal.aborted || !context.canClaim())) break;
       // Re-query after every call so newly arrived reset alerts can preempt queued digests.
-      const entry = this.store.pendingNotifications(1)[0];
-      if (!entry) break;
-      if (entry.state !== 'pending') continue;
       const now = (this.clock?.now() ?? new Date()).toISOString();
+      const entry = this.store.pendingNotifications(1, now)[0];
+      if (!entry) break;
+      if (!['pending','retry_wait'].includes(entry.state)) continue;
       const message = this.store.claimDelivery(entry.notification.id, now, this.channel.deliveryBinding?.(entry.notification, now));
       if (!message) continue;
       let result: DeliveryResult;

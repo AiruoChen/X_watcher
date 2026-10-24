@@ -1,6 +1,6 @@
 # 架构
 
-当前 v0.7：新增 `StructuredModel` / `MailTransport` 注入端口与 `bootstrap-analysis-mail.ts`。分析输出经严格结构、原文证据及保守时间校验后交给 `ProcessAnalysis`；分析失败不回滚抓取，新版本重分析默认无通知。邮件由 `DeliverNotifications` 先原子保存 attempt/binding 再调用客户端；`ReconcileNotification` 只查询，`ResolveNotification` 显式事务更新状态和审计。SQLite schema 4 增加通知 revision 与审计索引，保留旧数据及迁移备份。供应商尚未选择，所有新增联调为模拟，详见 [分析接口](integrations/analysis.md)、[邮件接口](integrations/mail.md)。
+当前 v0.7.1：新增 `StructuredModel` / `MailTransport` 注入端口与 `bootstrap-analysis-mail.ts`。分析输出经严格结构、原文证据及保守时间校验后交给 `ProcessAnalysis`；分析失败不回滚抓取，新版本重分析默认无通知。邮件由 `DeliverNotifications` 先原子保存 attempt/binding 再调用客户端；`ReconcileNotification` 只查询，`ResolveNotification` 显式事务更新状态和审计。SQLite schema 5 保留通知 revision 与审计，增加邮件到期重试索引；时间解析、旧版本关联和重试资格放在 domain/policies，由应用编排，存储事务重验并落盘。保留旧数据及迁移备份。供应商尚未选择，所有新增联调为模拟，详见 [分析接口](integrations/analysis.md)、[邮件接口](integrations/mail.md)。
 
 
 v0.6 新增来源通用组合根 `bootstrap-source.ts` 和 `source-preview.ts`，可选择 RSSHub 或官方 X。RSSHub 适配器只处理 HTTP/JSON Feed/HTML 数据，运行层没有 RSSHub 依赖。RSSHub 完成的是有限快照，按 `coverageStatus=unverified` 原子保存帖子、待办、gap 和观察检查点；`covers()` 不接受该范围为完整日报证据。正文 `completeness=unknown`，preview 不执行分析/邮件。稳定数字身份不可用，采用独立 handle 命名空间，不替换原官方作者身份。部署、数据合同和后续 B05/B07 接口见 [RSSHub 接入](integrations/rsshub.md)。
@@ -8,7 +8,7 @@ v0.6 新增来源通用组合根 `bootstrap-source.ts` 和 `source-preview.ts`�
 
 当前 v0.5/B04：`bootstrap-x.ts` 只在显式 preview 中从环境变量创建官方 XClient / XSource；`ResolveTarget` 在抓取前比对持久作者 ID，`IngestTarget` 原子提交带来源范围的帖子与分析待办。`x:probe` 不依赖存储，`x:preview` 复用 RuntimeHost，只运行抓取阶段；分析、日报和投递关闭。后文按版本保留历史设计，当前操作及实际账号未验证项见 [X 接入说明](integrations/x.md)。
 
-XClient 负责固定来源 GET、HTTP 期限、大小限制、禁止重定向和共享限流门；schemas/mapper 先校验 unknown，正文与引用上下文分离。来源错误通过领域 SourceFailure 交给调度器，保存 failureCode / retryNotBeforeAt，运行层没有导入 HTTP 或 X SDK。Post.origin、Coverage.scope 和调度错误元数据都是既有 SQLite JSON 的可选增量，v0.5 的 schema 为 3，当前 v0.7 为 4。
+XClient 负责固定来源 GET、HTTP 期限、大小限制、禁止重定向和共享限流门；schemas/mapper 先校验 unknown，正文与引用上下文分离。来源错误通过领域 SourceFailure 交给调度器，保存 failureCode / retryNotBeforeAt，运行层没有导入 HTTP 或 X SDK。Post.origin、Coverage.scope 和调度错误元数据都是既有 SQLite JSON 的可选增量，v0.5 的 schema 为 3，当前 v0.7.1 为 5。
 
 本文前半部分保留 v0.1 历史设计；B01 的已实现变更见末节与 [领域模型说明](DOMAIN_MODEL.md)。业务规则以 [需求文档](REQUIREMENTS.md) 为准，代码实施顺序见 [开发计划](DEVELOPMENT_PLAN.md)。
 

@@ -1,3 +1,4 @@
+import { normalizeResetTime } from './policies/reset-time.js';
 import { isInstant } from './time.js';
 import type { Analysis, Post, WatchTarget } from './model.js';
 function record(value: unknown): Record<string, unknown> {
@@ -48,11 +49,11 @@ export function validateAnalysis(post: Post, input: unknown): asserts input is A
       if (finding['normalizedAt'] === null) {
         if (finding['normalizationEvidence'] !== null) throw new Error('Unexpected normalization evidence.');
       } else {
-        // B01 supports only a verbatim explicit ISO timestamp; other parsers belong to B05.
         const evidence = finding['normalizationEvidence'], normalized = finding['normalizedAt'];
         quote(evidence, false); text(normalized);
-        if (typeof evidence !== 'string' || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(evidence)
-          || !isInstant(normalized) || !isInstant(evidence) || Date.parse(evidence) !== Date.parse(normalized)) throw new Error('Unproven normalized time.');
+        if (typeof evidence !== 'string' || evidence !== finding['whenText'] || !isInstant(normalized)
+          || normalizeResetTime(evidence, finding['timeZoneText'] as string | null) !== new Date(normalized).toISOString())
+          throw new Error('Unproven normalized time.');
       }
     }
   }

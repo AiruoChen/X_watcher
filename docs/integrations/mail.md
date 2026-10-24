@@ -1,10 +1,10 @@
-# B06：邮件与核对（v0.7）
+# B06：邮件与核对（v0.7.1）
 
 已实现供应商无关 MailTransport、EmailChannel、持久化尝试、只读核对、显式处理及离线测试。当前未选择邮件服务商，没有真实发信、供应商查询或 webhook 服务。`live` 仍由主程序拒绝启动。
 
 ## 接口
 
-- `MailTransport.send(notification, binding, signal)`：发送不可变快照。成功必须返回 accepted 和非空 providerId；只有协议已证明未接收时，才返回 rejected 与 definitelyNotAccepted=true。其他结果、异常、取消均为 unknown。
+- `MailTransport.send(notification, binding, signal)`：发送不可变快照。成功必须返回 accepted 和非空 providerId；只有协议已证明未接收时，才返回 rejected 与 definitelyNotAccepted=true。明确的暂时未接收还需 retryable=true，可附 retryAt（带偏移 ISO UTC 时刻）；其他结果、异常、取消均为 unknown。
 - 可选 `lookup(binding, providerId, signal)`：按保存的供应商/账号/消息 ID 查询；原响应丢失时只允许精确幂等键查询。没有这项能力就保持待核对，不搜索“最近邮件”。
 - `EmailChannel`：检查发件身份、收件/主题/正文、幂等窗口及结果；直接 send 被拒绝，发送必须经过 DeliverNotifications 的持久领取。
 - `ReconcileNotification.execute(id)`：只读查询，返回 revision、attemptId、receipt。
@@ -19,17 +19,18 @@
 | 结果 | 状态与后续 |
 | --- | --- |
 | 带 ID 的 accepted | provider_accepted；不代表 delivered |
-| 明确未接收 | failed；当前保守地只允许显式处理后重试 |
+| 明确未接收且 retryable=true | retry_wait；到期后受控自动重试，尊重 retryAt 和次数上限 |
+| 永久拒绝、不可重试、无合法重试信息或上限/幂等窗口不足 | failed；需显式处理 |
 | 超时、取消、响应丢失、进程恢复 | needs_attention；禁止自动重发 |
 | 精确核对 accepted / delivered / bounced | 显式 apply_receipt 后更新 |
 | not_found / unknown | 不足以证明没发出；不改状态 |
 | 人工 confirm_sent | provider_accepted，不伪造送达证据 |
 | 人工 confirm_not_sent_retry | pending；需原因、revision、attemptId 且未超次数 |
-| 人工 abandon | failed，留下审计 |
+| 人工 abandon | failed，留下审计；也可终止尚未领取的 retry_wait |
 
 人工重试本身不发邮件；之后必须由允许发送的运行流程消费。发送尝试保留原始结果，人工确认不会把旧 unknown 改成 accepted。重复/过时回执用 revision 拒绝。sending 期间禁止人工处理。
 
-binding 保存 provider、account、from、稳定 idempotencyKey、expiresAt、maxAttempts；不保存凭据。后续重试沿用原绑定，配置变更不能改账号或延长窗口。过期/上下文不符时不调用客户端，并保留待处理状态。schema 3 的旧尝试没有绑定时，不能自动猜测供应商查询；人工确认/放弃仍可用。
+binding 保存 provider、account、from、稳定 idempotencyKey、expiresAt、maxAttempts 及 retryPolicy（baseDelayMs/maxDelayMs）；不保存凭据。后续重试沿用原绑定，配置变更不能改账号或延长窗口。过期/上下文不符时不调用客户端，并保留待处理状态。schema 3 的旧尝试没有绑定时，不能自动猜测供应商查询；人工确认/放弃仍可用。
 
 ## 配置
 
@@ -39,7 +40,8 @@ binding 保存 provider、account、from、稳定 idempotencyKey、expiresAt、m
 | MAIL_ACCOUNT | 空；非秘密稳定账号标识，必须与注入客户端一致 |
 | MAIL_CREDENTIAL_ENV | 只存未来密钥的环境变量名 |
 | MAIL_IDEMPOTENCY_TTL_SECONDS | 0；未声明供应商幂等期限，不能依此自动重发；非零范围 1–604800 |
-| MAIL_MAX_ATTEMPTS | 5；1–100，仅限制明确授权的重试 |
+| MAIL_MAX_ATTEMPTS | 5；1–100，包含首次发送，限制自动及人工尝试 |
+| RETRY_BASE_SECONDS / RETRY_MAX_SECONDS | 30 / 1800；首次领取时固化为邮件退避策略，确定性指数增长至上限 |
 | MAIL_TIMEOUT_SECONDS | 30；由 ExecutionContext 应用 |
 
 `createMailModule(config, transport, clock, hasher)` 拒绝在 demo/preview 加载 real 邮件客户端。改变配置不修改已生成的正文、收件人、发送身份或历史尝试。`.env.example` 只有占位字段，本地真实密钥不进 Git。
@@ -57,4 +59,6 @@ npm run mail:resolve -- <notificationId> <attemptId> <revision> abandon operator
 
 status 只输出状态、版本、尝试标识和审计数量，不输出邮箱或正文。尚无供应商查询 CLI，因为尚未选择服务商；应用层核对接口和模拟客户端已可使用。程序化回执处理示例见 `src/modules-demo.ts`。
 
-数据库迁移到 schema 4，添加 notifications.revision 与邮件审计索引；升级前保留经校验的备份。测试覆盖 v3 旧未知邮件、双连接竞争、断连、恢复、幂等过期、错误账号/消息 ID、重复回执和审计重开。
+数据库最新 schema 5，保留 schema 4 的 revision 与审计，新增 next_delivery_ms 和到期索引；升级前保留经校验的备份。测试覆盖 v3 旧未知邮件、双连接竞争、断连、恢复、幂等过期、错误账号/消息 ID、重复回执和审计重开。
+
+自动重试只依据已验证的明确未接收事实，不依据 HTTP 状态码或幂等键猜测。下一次尝试取本地指数退避与供应商 retryAt 的较晚时刻，在保存尝试结果时同事务写入；不因进程重启、配置变化或手动检查提前。绑定中的策略和幂等期限不延长；下一时刻已超期限则停止自动重试。旧 binding 没有 retryPolicy、旧 retry_wait 没有期限时不自动消费。邮件退避采用确定性间隔，不使用 RETRY_JITTER；其他队列继续使用其原有策略。status 会显示 nextAttemptAt。具体服务商适配器与真实发送仍待选择和联调。

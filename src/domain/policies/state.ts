@@ -6,7 +6,7 @@ const jobs: Record<AnalysisJobState, readonly AnalysisJobState[]> = {
   retry_wait: ['processing', 'needs_attention'], completed: [], needs_attention: [],
 };
 const delivery: Record<DeliveryState, readonly DeliveryState[]> = {
-  pending: ['sending'], sending: ['provider_accepted', 'failed', 'needs_attention'],
+  pending: ['sending'], sending: ['provider_accepted', 'failed', 'needs_attention', 'retry_wait'],
   provider_accepted: ['delivered', 'bounced'], delivered: [], bounced: [],
   retry_wait: ['sending'], failed: [], needs_attention: [],
 };

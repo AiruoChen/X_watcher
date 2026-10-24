@@ -1,5 +1,5 @@
 import type { Post, SemanticAnalysis, ProductUpdate } from '../model.js';
-import { isInstant } from '../time.js';
+import { normalizeResetTime } from './reset-time.js';
 const invalid = (): never => { throw new Error('Invalid structured analysis.'); };
 function obj(value: unknown, keys: readonly string[]): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return invalid();
@@ -21,7 +21,7 @@ export function inputCompleteness(post: Post): 'full' | 'partial' {
   return (version.completeness !== undefined && version.completeness !== 'full')
     || (post.origin !== undefined && post.origin.completeness !== 'full') ? 'partial' : 'full';
 }
-/** Only explicit, verbatim ISO with offset is normalized. Relative times/DST abbreviations stay unknown. */
+/** Dates are resolved only from verbatim, unambiguous author text and timezone evidence. */
 export function parseSemanticAnalysis(post: Post, input: unknown, provenance: SemanticAnalysis['provenance']): SemanticAnalysis {
   const root = obj(input, ['postId','summary','topics','updates','reset']);
   if (root['postId'] !== post.id) return invalid();
@@ -42,9 +42,12 @@ export function parseSemanticAnalysis(post: Post, input: unknown, provenance: Se
   const nullableQuote = (value: unknown): string | null => value === null ? null : evidence(post, value);
   const quote = evidence(post, r['evidence']), when = nullableQuote(r['whenText']), zone = nullableQuote(r['timeZoneText']);
   // A model's exact timestamp is never trusted; only the supplied evidence can determine it.
-  const normalized = when !== null && isInstant(when) ? new Date(when).toISOString() : null;
+  const normalized = normalizeResetTime(when, zone);
   const previous = r['previousPostId'] === null ? null : text(r['previousPostId'], 100);
-  if (previous !== null && (!/^[a-zA-Z0-9:_-]+$/.test(previous) || !post.text.includes(previous))) return invalid();
+  const history = post.origin?.editHistory ?? [], currentIndex = history.indexOf(post.origin?.sourcePostId ?? post.id);
+  const previousIndex = previous === null ? -1 : history.indexOf(previous);
+  const knownPriorId = previousIndex >= 0 && currentIndex > previousIndex;
+  if (previous !== null && (!/^[a-zA-Z0-9:_-]+$/.test(previous) || (!post.text.includes(previous) && !knownPriorId))) return invalid();
   const certainty = choice(r['certainty'], ['confirmed','uncertain']);
   if (kind === 'discussion' && certainty !== 'uncertain') return invalid();
   return { ...base, reset: { evidence: quote, whenText: when, timeZoneText: zone },

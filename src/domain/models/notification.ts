@@ -1,4 +1,5 @@
 export interface Notification {
+  readonly supersedesPostKey?: string;
   readonly id: string;
   readonly kind: 'reset' | 'digest' | 'correction' | 'service_alert';
   readonly targetId: string;
@@ -12,10 +13,11 @@ export interface Notification {
 
 export type DeliveryResult =
   | { readonly status: 'accepted'; readonly providerId: string }
-  | { readonly status: 'rejected'; readonly reason: string }
+  | { readonly status: 'rejected'; readonly reason: string; readonly retry?: { readonly notBefore: string | null } }
   | { readonly status: 'unknown'; readonly reason: string };
 export type DeliveryState = 'pending' | 'sending' | 'provider_accepted' | 'delivered' | 'bounced' | 'retry_wait' | 'failed' | 'needs_attention';
 export interface OutboxEntry {
+  readonly nextAttemptAt?: string;
   readonly notification: Notification;
   readonly state: DeliveryState;
   readonly result: DeliveryResult | null;

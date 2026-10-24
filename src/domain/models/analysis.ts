@@ -40,6 +40,7 @@ export interface AnalysisResult {
   readonly analysis: Analysis;
 }
 export interface RuleEvent {
+  readonly supersedesPostKey?: string;
   readonly id: string;
   readonly jobId: string;
   readonly postKey: string;

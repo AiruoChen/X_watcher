@@ -14,5 +14,6 @@ export function createMailModule(config: RuntimeConfig, client: MailTransport, c
   if (!config.services.mail.from || config.services.mail.provider !== client.provider || config.mailPolicy.account !== client.account)
     throw new Error('Mail provider/account/from must match the configured transport.');
   return new EmailChannel(client, clock, hasher, { from: config.services.mail.from,
-    idempotencyTtlMs: config.mailPolicy.idempotencyTtlMs, maxAttempts: config.mailPolicy.maxAttempts });
+    idempotencyTtlMs: config.mailPolicy.idempotencyTtlMs, maxAttempts: config.mailPolicy.maxAttempts,
+    retryPolicy: { baseDelayMs: config.retry.baseDelayMs, maxDelayMs: config.retry.maxDelayMs } });
 }

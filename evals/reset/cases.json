@@ -6,7 +6,8 @@
       "kind": "announcement",
       "product": "chatgpt",
       "whenText": "tonight",
-      "normalizedAt": null
+      "normalizedAt": null,
+      "certainty": "confirmed"
     }
   },
   {
@@ -16,7 +17,8 @@
       "kind": "announcement",
       "product": "codex",
       "whenText": "tomorrow at noon",
-      "normalizedAt": null
+      "normalizedAt": null,
+      "certainty": "confirmed"
     }
   },
   {
@@ -26,7 +28,8 @@
       "kind": "announcement",
       "product": "api",
       "whenText": "2026-01-03T00:00:00Z",
-      "normalizedAt": "2026-01-03T00:00:00.000Z"
+      "normalizedAt": "2026-01-03T00:00:00.000Z",
+      "certainty": "confirmed"
     }
   },
   {
@@ -36,7 +39,8 @@
       "kind": "announcement",
       "product": "chatgpt",
       "whenText": "今晚",
-      "normalizedAt": null
+      "normalizedAt": null,
+      "certainty": "confirmed"
     }
   },
   {
@@ -46,7 +50,8 @@
       "kind": "announcement",
       "product": "codex",
       "whenText": "明天",
-      "normalizedAt": null
+      "normalizedAt": null,
+      "certainty": "confirmed"
     }
   },
   {
@@ -56,7 +61,8 @@
       "kind": "announcement",
       "product": "chatgpt",
       "whenText": "Friday",
-      "normalizedAt": null
+      "normalizedAt": null,
+      "certainty": "confirmed"
     }
   },
   {
@@ -66,7 +72,8 @@
       "kind": "discussion",
       "product": "chatgpt",
       "whenText": "tomorrow",
-      "normalizedAt": null
+      "normalizedAt": null,
+      "certainty": "uncertain"
     }
   },
   {
@@ -76,7 +83,8 @@
       "kind": "discussion",
       "product": "codex",
       "whenText": "Monday",
-      "normalizedAt": null
+      "normalizedAt": null,
+      "certainty": "uncertain"
     }
   },
   {
@@ -86,7 +94,8 @@
       "kind": "discussion",
       "product": "api",
       "whenText": "下周",
-      "normalizedAt": null
+      "normalizedAt": null,
+      "certainty": "uncertain"
     }
   },
   {
@@ -96,7 +105,8 @@
       "kind": "correction",
       "product": "chatgpt",
       "whenText": "Saturday",
-      "normalizedAt": null
+      "normalizedAt": null,
+      "certainty": "confirmed"
     }
   },
   {
@@ -106,7 +116,8 @@
       "kind": "correction",
       "product": "codex",
       "whenText": "明天",
-      "normalizedAt": null
+      "normalizedAt": null,
+      "certainty": "confirmed"
     }
   },
   {
@@ -116,7 +127,8 @@
       "kind": "announcement",
       "product": "api",
       "whenText": "next week",
-      "normalizedAt": null
+      "normalizedAt": null,
+      "certainty": "confirmed"
     }
   },
   {
@@ -126,7 +138,8 @@
       "kind": "announcement",
       "product": "chatgpt",
       "whenText": "this evening",
-      "normalizedAt": null
+      "normalizedAt": null,
+      "certainty": "confirmed"
     }
   },
   {
@@ -136,7 +149,8 @@
       "kind": "announcement",
       "product": "codex",
       "whenText": "soon",
-      "normalizedAt": null
+      "normalizedAt": null,
+      "certainty": "confirmed"
     }
   },
   {
@@ -146,7 +160,8 @@
       "kind": "announcement",
       "product": "api",
       "whenText": null,
-      "normalizedAt": null
+      "normalizedAt": null,
+      "certainty": "confirmed"
     }
   },
   {
@@ -156,7 +171,8 @@
       "kind": "announcement",
       "product": "chatgpt",
       "whenText": null,
-      "normalizedAt": null
+      "normalizedAt": null,
+      "certainty": "confirmed"
     }
   },
   {
@@ -166,7 +182,8 @@
       "kind": "discussion",
       "product": "chatgpt",
       "whenText": "today",
-      "normalizedAt": null
+      "normalizedAt": null,
+      "certainty": "uncertain"
     }
   },
   {
@@ -176,7 +193,8 @@
       "kind": "discussion",
       "product": "codex",
       "whenText": null,
-      "normalizedAt": null
+      "normalizedAt": null,
+      "certainty": "uncertain"
     }
   },
   {
@@ -186,7 +204,8 @@
       "kind": "discussion",
       "product": "api",
       "whenText": null,
-      "normalizedAt": null
+      "normalizedAt": null,
+      "certainty": "uncertain"
     }
   },
   {
@@ -196,7 +215,8 @@
       "kind": "correction",
       "product": "chatgpt",
       "whenText": "2026-01-03T00:00:00+08:00",
-      "normalizedAt": "2026-01-02T16:00:00.000Z"
+      "normalizedAt": "2026-01-02T16:00:00.000Z",
+      "certainty": "confirmed"
     }
   },
   {
@@ -206,7 +226,8 @@
       "kind": "announcement",
       "product": "codex",
       "whenText": "midnight UTC",
-      "normalizedAt": null
+      "normalizedAt": null,
+      "certainty": "confirmed"
     }
   },
   {
@@ -216,7 +237,8 @@
       "kind": "announcement",
       "product": "api",
       "whenText": "Tomorrow",
-      "normalizedAt": null
+      "normalizedAt": null,
+      "certainty": "confirmed"
     }
   },
   {
@@ -226,7 +248,8 @@
       "kind": "announcement",
       "product": "chatgpt",
       "whenText": null,
-      "normalizedAt": null
+      "normalizedAt": null,
+      "certainty": "confirmed"
     }
   },
   {
@@ -236,7 +259,8 @@
       "kind": "discussion",
       "product": "codex",
       "whenText": null,
-      "normalizedAt": null
+      "normalizedAt": null,
+      "certainty": "uncertain"
     }
   },
   {
@@ -246,7 +270,8 @@
       "kind": "announcement",
       "product": "chatgpt",
       "whenText": "9 AM PST tomorrow",
-      "normalizedAt": null
+      "normalizedAt": null,
+      "certainty": "confirmed"
     }
   },
   {
@@ -256,7 +281,8 @@
       "kind": "announcement",
       "product": "codex",
       "whenText": "01:30 on the DST transition",
-      "normalizedAt": null
+      "normalizedAt": null,
+      "certainty": "confirmed"
     }
   },
   {
@@ -266,7 +292,8 @@
       "kind": "announcement",
       "product": "api",
       "whenText": "03/04 at midnight",
-      "normalizedAt": null
+      "normalizedAt": null,
+      "certainty": "confirmed"
     }
   },
   {
@@ -276,7 +303,8 @@
       "kind": "announcement",
       "product": "chatgpt",
       "whenText": "tomorrow",
-      "normalizedAt": null
+      "normalizedAt": null,
+      "certainty": "confirmed"
     }
   },
   {
@@ -286,7 +314,8 @@
       "kind": "announcement",
       "product": "codex",
       "whenText": "下周五",
-      "normalizedAt": null
+      "normalizedAt": null,
+      "certainty": "confirmed"
     }
   },
   {
@@ -296,7 +325,8 @@
       "kind": "discussion",
       "product": "api",
       "whenText": "soon",
-      "normalizedAt": null
+      "normalizedAt": null,
+      "certainty": "uncertain"
     }
   },
   {
@@ -306,7 +336,8 @@
       "kind": "correction",
       "product": "chatgpt",
       "whenText": null,
-      "normalizedAt": null
+      "normalizedAt": null,
+      "certainty": "confirmed"
     }
   },
   {
@@ -316,7 +347,8 @@
       "kind": "discussion",
       "product": "codex",
       "whenText": null,
-      "normalizedAt": null
+      "normalizedAt": null,
+      "certainty": "uncertain"
     }
   },
   {
@@ -326,7 +358,8 @@
       "kind": "announcement",
       "product": "api",
       "whenText": "2026-01-03T09:30:00+05:30",
-      "normalizedAt": "2026-01-03T04:00:00.000Z"
+      "normalizedAt": "2026-01-03T04:00:00.000Z",
+      "certainty": "confirmed"
     }
   },
   {
@@ -336,7 +369,8 @@
       "kind": "discussion",
       "product": "chatgpt",
       "whenText": "今晚",
-      "normalizedAt": null
+      "normalizedAt": null,
+      "certainty": "uncertain"
     }
   },
   {
@@ -346,7 +380,8 @@
       "kind": "announcement",
       "product": "codex",
       "whenText": "2026-02-30T00:00:00Z",
-      "normalizedAt": null
+      "normalizedAt": null,
+      "certainty": "confirmed"
     }
   },
   {
@@ -356,7 +391,8 @@
       "kind": "discussion",
       "product": "api",
       "whenText": null,
-      "normalizedAt": null
+      "normalizedAt": null,
+      "certainty": "uncertain"
     }
   },
   {
@@ -366,7 +402,8 @@
       "kind": "none",
       "product": null,
       "whenText": null,
-      "normalizedAt": null
+      "normalizedAt": null,
+      "certainty": null
     }
   },
   {
@@ -376,7 +413,8 @@
       "kind": "none",
       "product": null,
       "whenText": null,
-      "normalizedAt": null
+      "normalizedAt": null,
+      "certainty": null
     }
   },
   {
@@ -386,7 +424,8 @@
       "kind": "none",
       "product": null,
       "whenText": null,
-      "normalizedAt": null
+      "normalizedAt": null,
+      "certainty": null
     }
   },
   {
@@ -396,7 +435,8 @@
       "kind": "none",
       "product": null,
       "whenText": null,
-      "normalizedAt": null
+      "normalizedAt": null,
+      "certainty": null
     }
   },
   {
@@ -406,7 +446,8 @@
       "kind": "none",
       "product": null,
       "whenText": null,
-      "normalizedAt": null
+      "normalizedAt": null,
+      "certainty": null
     }
   },
   {
@@ -416,7 +457,8 @@
       "kind": "none",
       "product": null,
       "whenText": null,
-      "normalizedAt": null
+      "normalizedAt": null,
+      "certainty": null
     }
   },
   {
@@ -426,7 +468,8 @@
       "kind": "none",
       "product": null,
       "whenText": null,
-      "normalizedAt": null
+      "normalizedAt": null,
+      "certainty": null
     }
   },
   {
@@ -436,7 +479,8 @@
       "kind": "none",
       "product": null,
       "whenText": null,
-      "normalizedAt": null
+      "normalizedAt": null,
+      "certainty": null
     }
   },
   {
@@ -446,7 +490,8 @@
       "kind": "none",
       "product": null,
       "whenText": null,
-      "normalizedAt": null
+      "normalizedAt": null,
+      "certainty": null
     }
   },
   {
@@ -456,7 +501,8 @@
       "kind": "none",
       "product": null,
       "whenText": null,
-      "normalizedAt": null
+      "normalizedAt": null,
+      "certainty": null
     }
   },
   {
@@ -466,7 +512,8 @@
       "kind": "none",
       "product": null,
       "whenText": null,
-      "normalizedAt": null
+      "normalizedAt": null,
+      "certainty": null
     }
   },
   {
@@ -476,7 +523,8 @@
       "kind": "none",
       "product": null,
       "whenText": null,
-      "normalizedAt": null
+      "normalizedAt": null,
+      "certainty": null
     }
   },
   {
@@ -486,7 +534,8 @@
       "kind": "none",
       "product": null,
       "whenText": null,
-      "normalizedAt": null
+      "normalizedAt": null,
+      "certainty": null
     }
   },
   {
@@ -496,7 +545,8 @@
       "kind": "none",
       "product": null,
       "whenText": null,
-      "normalizedAt": null
+      "normalizedAt": null,
+      "certainty": null
     }
   },
   {
@@ -506,7 +556,8 @@
       "kind": "none",
       "product": null,
       "whenText": null,
-      "normalizedAt": null
+      "normalizedAt": null,
+      "certainty": null
     }
   },
   {
@@ -516,7 +567,8 @@
       "kind": "none",
       "product": null,
       "whenText": null,
-      "normalizedAt": null
+      "normalizedAt": null,
+      "certainty": null
     }
   },
   {
@@ -526,7 +578,8 @@
       "kind": "none",
       "product": null,
       "whenText": null,
-      "normalizedAt": null
+      "normalizedAt": null,
+      "certainty": null
     }
   },
   {
@@ -536,7 +589,8 @@
       "kind": "none",
       "product": null,
       "whenText": null,
-      "normalizedAt": null
+      "normalizedAt": null,
+      "certainty": null
     }
   },
   {
@@ -546,7 +600,8 @@
       "kind": "none",
       "product": null,
       "whenText": null,
-      "normalizedAt": null
+      "normalizedAt": null,
+      "certainty": null
     }
   },
   {
@@ -556,7 +611,8 @@
       "kind": "none",
       "product": null,
       "whenText": null,
-      "normalizedAt": null
+      "normalizedAt": null,
+      "certainty": null
     }
   },
   {
@@ -566,7 +622,8 @@
       "kind": "none",
       "product": null,
       "whenText": null,
-      "normalizedAt": null
+      "normalizedAt": null,
+      "certainty": null
     }
   },
   {
@@ -576,7 +633,8 @@
       "kind": "none",
       "product": null,
       "whenText": null,
-      "normalizedAt": null
+      "normalizedAt": null,
+      "certainty": null
     }
   },
   {
@@ -586,7 +644,8 @@
       "kind": "none",
       "product": null,
       "whenText": null,
-      "normalizedAt": null
+      "normalizedAt": null,
+      "certainty": null
     }
   },
   {
@@ -596,7 +655,8 @@
       "kind": "none",
       "product": null,
       "whenText": null,
-      "normalizedAt": null
+      "normalizedAt": null,
+      "certainty": null
     }
   }
 ]

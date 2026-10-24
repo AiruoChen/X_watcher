@@ -1,9 +1,12 @@
 import type { SQLInputValue } from 'node:sqlite';
 import type { DeliveryBinding, DeliveryRecord, DeliveryResolution, MailAudit } from '../../../domain/model.js';
+import { deliveryOutcome } from '../../../domain/policies/mail-retry.js';
 import { resolvedDeliveryState, validateBinding } from '../../../domain/policies/mail.js';
 import type { AnalysisCommit, IngestionCommit, PollCommit, WatchStore } from '../../../domain/ports.js';
 import type { AnalysisJob, AnalysisResult, AnalyzedPost, Checkpoint, Coverage, DeliveryAttempt, DeliveryClaim,
   DeliveryResult, DigestReport, DigestWindow, Notification, OutboxEntry, PostVersion, RuleEvent, SourceQuery, TargetIdentity } from '../../../domain/model.js';
+import type { SemanticAnalysis } from '../../../domain/model.js';
+import { correctionBasis, validateCorrectionLink } from '../../../domain/policies/correction.js';
 import { validateReanalysis } from '../../../domain/policies/reanalysis.js';
 import { RevisionConflictError } from '../../../domain/errors.js';
 import { stableId } from '../../../domain/identifiers.js';
@@ -116,6 +119,16 @@ export class SqliteStore implements WatchStore {
     return covers(ranges, targetId, query);
   }
   postVersion(key: string): PostVersion | null { return this.one('SELECT payload FROM post_versions WHERE key=?', key); }
+  previousPostVersion(postKey: string, explicitPostId: string | null): PostVersion | null {
+    const post = this.postVersion(postKey); if (!post) return null;
+    const source = post.origin?.sourcePostId ?? post.id, history = post.origin?.editHistory ?? [];
+    const ids = explicitPostId !== null ? [explicitPostId] : [post.id, ...history.slice(0, Math.max(0, history.indexOf(source)))];
+    const marks = ids.map(() => '?').join(',');
+    const candidates = this.rows<PostVersion>(`SELECT p.payload FROM post_versions p WHERE p.target_id=?
+      AND p.seq<(SELECT seq FROM post_versions WHERE key=?) AND (p.post_id IN (${marks})
+      OR json_extract(p.payload,'$.origin.sourcePostId') IN (${marks})) ORDER BY p.seq DESC`, post.targetId, postKey, ...ids, ...ids);
+    return candidates.find(p => correctionBasis(post, p, explicitPostId) !== null) ?? null;
+  }
   hasPostVersion(key: string): boolean { return !!this.db.prepare('SELECT 1 FROM post_versions WHERE key=?').get(key); }
   latestVersions(targetId: string, query: SourceQuery): readonly PostVersion[] { return this.latestPosts(targetId, query); }
   versions(targetId: string): readonly PostVersion[] { return this.rows('SELECT payload FROM post_versions WHERE target_id=? ORDER BY seq', targetId); }
@@ -184,14 +197,19 @@ export class SqliteStore implements WatchStore {
       if (result.jobId !== job.id || result.postKey !== job.postKey || result.analyzerVersion !== job.analyzerVersion
         || result.promptVersion !== job.promptVersion || !isInstant(result.completedAt)) throw new Error('Analysis identity mismatch.');
       validateAnalysis(post, result.analysis);
+      const semantic = result.analysis as Partial<SemanticAnalysis>;
+      if (Object.hasOwn(semantic, 'correctionLink'))
+        validateCorrectionLink(post, result.analysis, this.previousPostVersion(post.key, semantic.resetDetails?.previousPostId ?? null));
       this.db.prepare('INSERT INTO analysis_results(job_id,post_key,payload) VALUES(?,?,?)').run(job.id, job.postKey, pack(result));
       for (const event of commit.events) {
+        if ((event.supersedesPostKey ?? null) !== (semantic.correctionLink?.postKey ?? null)) throw new Error('Invalid correction event link.');
         if (event.jobId !== job.id || event.targetId !== job.targetId || event.postKey !== job.postKey
           || event.id !== stableId('event', job.postKey, event.ruleId, event.ruleVersion)) throw new Error('Rule event identity mismatch.');
         this.db.prepare('INSERT INTO rule_events(id,job_id,target_id,payload) VALUES(?,?,?,?) ON CONFLICT(id) DO NOTHING')
           .run(event.id, job.id, job.targetId, pack(event));
       }
       for (const message of commit.notifications) {
+        if ((message.supersedesPostKey ?? null) !== (semantic.correctionLink?.postKey ?? null)) throw new Error('Invalid correction notification link.');
         if (!job.emitNotifications || message.targetId !== job.targetId || !commit.events.some(e => e.id === message.originId)) throw new Error('Invalid notification origin or replay.');
         const old = this.one<Notification>('SELECT payload FROM notifications WHERE id=?', message.id);
         if (old && old.originId !== message.originId) throw new Error('Notification identity collision.');
@@ -230,13 +248,14 @@ export class SqliteStore implements WatchStore {
   enqueue(notification: Notification): boolean { return this.write(() => this.enqueueRaw(notification)); }
   private entries(sql: string, ...args: SQLInputValue[]): OutboxEntry[] {
     return this.db.prepare(sql).all(...args).map(r => ({ notification: JSON.parse(String(r['payload'])) as Notification,
-      state: r['state'] as OutboxEntry['state'], result: r['result'] === null ? null : JSON.parse(String(r['result'])) as DeliveryResult }));
+      state: r['state'] as OutboxEntry['state'], result: r['result'] === null ? null : JSON.parse(String(r['result'])) as DeliveryResult,
+      ...(r['next_delivery_ms'] === null ? {} : { nextAttemptAt: new Date(Number(r['next_delivery_ms'])).toISOString() }) }));
   }
   outbox(): readonly OutboxEntry[] { return this.entries('SELECT * FROM notifications ORDER BY seq'); }
   private limit(limit: number): void { if (!Number.isInteger(limit) || limit < 1 || limit > 1000) throw new Error('Invalid page limit.'); }
-  pendingNotifications(limit: number): readonly OutboxEntry[] {
-    this.limit(limit);
-    return this.entries("SELECT * FROM notifications WHERE state='pending' ORDER BY (CASE WHEN json_extract(payload,'$.kind') IN ('reset','correction') THEN 0 ELSE 1 END),seq LIMIT ?", limit);
+  pendingNotifications(limit: number, now?: string): readonly OutboxEntry[] {
+    this.limit(limit); if (now !== undefined && !isInstant(now)) throw new Error('Invalid delivery time.');
+    return this.entries("SELECT * FROM notifications WHERE state='pending' OR (state='retry_wait' AND next_delivery_ms<=?) ORDER BY (CASE WHEN json_extract(payload,'$.kind') IN ('reset','correction') THEN 0 ELSE 1 END),seq LIMIT ?", now === undefined ? -1 : Date.parse(now), limit);
   }
   deliveryRecord(id: string): DeliveryRecord | null {
     const row = this.db.prepare(`SELECT n.*, a.payload AS attempt_payload FROM notifications n
@@ -244,7 +263,8 @@ export class SqliteStore implements WatchStore {
       WHERE n.id=?`).get(id);
     if (!row) return null;
     return { entry: { notification: JSON.parse(String(row['payload'])) as Notification, state: row['state'] as OutboxEntry['state'],
-      result: row['result'] === null ? null : JSON.parse(String(row['result'])) as DeliveryResult },
+      result: row['result'] === null ? null : JSON.parse(String(row['result'])) as DeliveryResult,
+      ...(row['next_delivery_ms'] === null ? {} : { nextAttemptAt: new Date(Number(row['next_delivery_ms'])).toISOString() }) },
       revision: Number(row['revision']), attempt: row['attempt_payload'] === null ? null : JSON.parse(String(row['attempt_payload'])) as DeliveryAttempt };
   }
   resolveDelivery(command: DeliveryResolution): DeliveryRecord {
@@ -254,7 +274,7 @@ export class SqliteStore implements WatchStore {
       const state = resolvedDeliveryState(record, command);
       const result = state === 'pending' ? null : command.receipt?.providerId
         ? { status: 'accepted' as const, providerId: command.receipt.providerId } : record.entry.result;
-      const changed = this.db.prepare('UPDATE notifications SET state=?,result=?,revision=revision+1 WHERE id=? AND revision=?')
+      const changed = this.db.prepare('UPDATE notifications SET state=?,result=?,revision=revision+1,next_delivery_ms=NULL WHERE id=? AND revision=?')
         .run(state, result === null ? null : pack(result), command.notificationId, command.expectedRevision);
       if (Number(changed.changes) !== 1) throw new RevisionConflictError();
       const audit: MailAudit = { ...command, kind: 'mail_resolution', resultingState: state };
@@ -269,7 +289,8 @@ export class SqliteStore implements WatchStore {
     if (!isInstant(now)) throw new Error('Invalid delivery time.');
     return this.write(() => {
       const entry = this.entries('SELECT * FROM notifications WHERE id=?', id)[0];
-      if (!entry || entry.state !== 'pending') return null;
+      if (!entry || (entry.state !== 'pending' && !(entry.state === 'retry_wait' && entry.nextAttemptAt !== undefined
+        && Date.parse(entry.nextAttemptAt) <= Date.parse(now)))) return null;
       const row = this.db.prepare('SELECT MAX(number) number FROM delivery_attempts WHERE notification_id=?').get(id)!;
       const number = Number(row['number'] ?? 0) + 1, attemptId = stableId('attempt', id, String(number));
       const previous = this.deliveryRecord(id)!;
@@ -279,7 +300,7 @@ export class SqliteStore implements WatchStore {
       const savedBinding = binding ? { binding: structuredClone(binding) } : {};
       const attempt: DeliveryAttempt = { id: attemptId, notificationId: id, number, startedAt: now, finishedAt: null, result: null, ...savedBinding };
       this.db.prepare('INSERT INTO delivery_attempts(id,notification_id,number,payload,claimed_by) VALUES(?,?,?,?,?)').run(attemptId, id, number, pack(attempt), this.runtime.workerId());
-      this.db.prepare('UPDATE notifications SET state=?,revision=revision+1 WHERE id=?').run(transitionDelivery(entry.state, 'sending'), id);
+      this.db.prepare('UPDATE notifications SET state=?,revision=revision+1,next_delivery_ms=NULL WHERE id=?').run(transitionDelivery(entry.state, 'sending'), id);
       return { attemptId, notification: entry.notification, ...savedBinding };
     });
   }
@@ -290,9 +311,11 @@ export class SqliteStore implements WatchStore {
   private finishRaw(attempt: DeliveryAttempt, result: DeliveryResult, now: string): void {
     const row = this.db.prepare('SELECT state FROM notifications WHERE id=?').get(attempt.notificationId)!;
     if (attempt.result !== null || !isInstant(now)) throw new Error('Invalid delivery attempt.');
-    const state = transitionDelivery(row['state'] as OutboxEntry['state'], result.status === 'accepted' ? 'provider_accepted' : result.status === 'rejected' ? 'failed' : 'needs_attention');
+    const outcome = deliveryOutcome(attempt, result, now);
+    const state = transitionDelivery(row['state'] as OutboxEntry['state'], outcome.state);
     this.db.prepare('UPDATE delivery_attempts SET payload=? WHERE id=?').run(pack({ ...attempt, finishedAt: now, result }), attempt.id);
-    this.db.prepare('UPDATE notifications SET state=?,result=?,revision=revision+1 WHERE id=?').run(state, pack(result), attempt.notificationId);
+    this.db.prepare('UPDATE notifications SET state=?,result=?,revision=revision+1,next_delivery_ms=? WHERE id=?')
+      .run(state, pack(result), outcome.nextAttemptAt ? Date.parse(outcome.nextAttemptAt) : null, attempt.notificationId);
   }
   finishDelivery(attemptId: string, result: DeliveryResult, now: string): void {
     this.write(() => {

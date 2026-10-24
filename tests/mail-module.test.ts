@@ -139,7 +139,7 @@ test('schema v3 migration preserves uncertain mail, immutable snapshot and backu
       JSON.stringify({ id: 'legacy', notificationId: message.id, number: 1, startedAt: now, finishedAt: now, result: { status: 'unknown', reason: 'interrupted' } }));
     db.close(); store = new SqliteStore(path);
     assert.deepEqual(store.outbox()[0]!.notification, message); assert.equal(store.deliveryRecord(message.id)!.revision, 0);
-    const backup = readdirSync(root).find(p => p.includes('.pre-v4.') && p.endsWith('.sqlite'))!;
+    const backup = readdirSync(root).find(p => p.includes('.pre-v' + MIGRATIONS.length + '.') && p.endsWith('.sqlite'))!;
     const old = new DatabaseSync(join(root, backup), { readOnly: true }); assert.equal(old.prepare('PRAGMA user_version').get()!['user_version'], 3); old.close();
     store.resolveDelivery(resolution(store, 'abandon')); store.close(); store = new SqliteStore(path);
     assert.equal(store.deliveryRecord(message.id)!.entry.state, 'failed'); assert.equal(store.mailAudits(message.id).length, 1);

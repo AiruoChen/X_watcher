@@ -1,5 +1,6 @@
 import type { DeliveryAttempt, OutboxEntry, DeliveryState } from './notification.js';
 export interface DeliveryBinding {
+  readonly retryPolicy?: { readonly baseDelayMs: number; readonly maxDelayMs: number };
   readonly provider: string; readonly account: string; readonly from: string;
   readonly idempotencyKey: string; readonly expiresAt: string | null; readonly maxAttempts: number;
 }

@@ -1,6 +1,6 @@
 {
   "name": "x-watcher",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "private": true,
   "type": "module",
   "description": "Modular X monitoring agent: daily digests and reset alerts",

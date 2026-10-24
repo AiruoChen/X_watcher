@@ -61,3 +61,7 @@ demo 与 CI 不读取真实凭据去调用外部服务。收件人仅出现在�
 ## v0.7 分析和邮件接口
 
 新增 ANALYSIS_ALLOW_PARTIAL（默认 false）、MAIL_ACCOUNT（稳定非秘密账号标识，默认空）、MAIL_IDEMPOTENCY_TTL_SECONDS（0–604800，默认 0）、MAIL_MAX_ATTEMPTS（1–100，默认 5）。这些字段参与配置指纹但不进入 describeConfig 的脱敏输出。具体注入及语义见 [分析接口](integrations/analysis.md) 和 [邮件接口](integrations/mail.md)。目前不需填写服务商或密钥；保持 ANALYSIS_PROVIDER=deferred 即可继续 RSSHub 只读运行。
+
+## v0.7.1 审查修复
+
+邮件首次领取将 RETRY_BASE_SECONDS / RETRY_MAX_SECONDS 固化到 binding.retryPolicy；MAIL_MAX_ATTEMPTS 包含首次发送。供应商证明未接收且声明 retryable 后，才按确定性指数退避和 retryAt 下限消费 retry_wait。未知发送不重试，旧绑定不自动补猜策略。升级分析算法时显式提高 ANALYZER_VERSION 并通过重分析用例排队，已保存结果/通知不会自动回放。

@@ -1,5 +1,7 @@
 import type { Clock, ContentAnalyzer, ExecutionContext, NotificationRule, WatchStore } from '../domain/ports.js';
 import type { Notification, RuleEvent, RuntimeConfig, VersionedAnalysis, WatchTarget } from '../domain/model.js';
+import { withCorrectionLink } from '../domain/policies/correction.js';
+import type { SemanticAnalysis } from '../domain/model.js';
 import { stableId } from '../domain/identifiers.js';
 import { resetEligible } from '../domain/policies/reset.js';
 import { retryDelay } from '../domain/policies/retry.js';
@@ -18,10 +20,15 @@ export class ProcessAnalysis {
         const post = this.store.postVersion(job.postKey)!;
         if ((post.completeness !== 'full' && !this.analyzer.supportsPartial)
           || (this.analyzer.version !== undefined && (job.analyzerVersion !== this.analyzer.version || job.promptVersion !== this.analyzer.promptVersion))) { this.store.failAnalysis(job.id, job.revision, null); continue; }
-        const analysis = context ? await context.call(signal => this.analyzer.analyze(post, signal), this.config.services.analysis.timeoutMs)
+        let analysis = context ? await context.call(signal => this.analyzer.analyze(post, signal), this.config.services.analysis.timeoutMs)
           : await this.analyzer.analyze(post);
         context?.signal.throwIfAborted();
         validateAnalysis(post, analysis);
+        const semantic = analysis as Partial<SemanticAnalysis>;
+        if (semantic.resetFinding?.kind === 'correction' && semantic.resetDetails) {
+          analysis = withCorrectionLink(post, analysis, this.store.previousPostVersion(post.key, semantic.resetDetails.previousPostId));
+        }
+        const supersedes = (analysis as Partial<SemanticAnalysis>).correctionLink?.postKey;
         const now = this.clock.now().toISOString();
         const events: RuleEvent[] = [], notifications: Notification[] = [];
         const identity = this.store.target(target.id)!;
@@ -30,13 +37,14 @@ export class ProcessAnalysis {
           if (!output.length) continue;
           const eventId = stableId('event', post.key, rule.id, rule.version ?? 'v1');
           events.push({ id: eventId, jobId: job.id, postKey: post.key, targetId: target.id,
-            ruleId: rule.id, ruleVersion: rule.version ?? 'v1', createdAt: now });
+            ruleId: rule.id, ruleVersion: rule.version ?? 'v1', createdAt: now, ...(supersedes ? { supersedesPostKey: supersedes } : {}) });
           const finding = (analysis as Partial<VersionedAnalysis>).resetFinding;
           const normalized = finding && finding.kind !== 'none' ? finding.normalizedAt : null;
           const eligible = resetEligible(post.publishedAt, post.discoveredAt, identity.monitorStartedAt, this.config.policy.resetMaxAgeMs, normalized)
             && resetEligible(post.publishedAt, now, identity.monitorStartedAt, this.config.policy.resetMaxAgeMs, normalized);
           if (job.emitNotifications && eligible) output.forEach((message, index) => notifications.push({ ...message,
-            id: stableId('notification', eventId, String(index)), originId: eventId, configRevision: this.config.revision }));
+            id: stableId('notification', eventId, String(index)), originId: eventId, configRevision: this.config.revision,
+            ...(supersedes ? { supersedesPostKey: supersedes } : {}) }));
         }
         this.store.commitAnalysis({ jobId: job.id, expectedRevision: job.revision,
           result: { jobId: job.id, postKey: post.key, analyzerVersion: job.analyzerVersion, promptVersion: job.promptVersion,

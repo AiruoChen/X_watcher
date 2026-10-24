@@ -28,5 +28,9 @@ export function inspectDatabase(db: DatabaseSync): number {
     db.prepare('SELECT revision FROM notifications LIMIT 0').all();
     if (!db.prepare("SELECT 1 FROM sqlite_master WHERE type='index' AND name='mail_audit_notification'").get()) throw new Error('Missing mail audit index.');
   }
+  if (version >= 5) {
+    db.prepare('SELECT next_delivery_ms FROM notifications LIMIT 0').all();
+    if (!db.prepare("SELECT 1 FROM sqlite_master WHERE type='index' AND name='notification_retry_due'").get()) throw new Error('Missing retry index.');
+  }
   return version;
 }
