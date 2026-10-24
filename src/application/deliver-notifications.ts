@@ -13,12 +13,13 @@ export class DeliverNotifications {
       const entry = this.store.pendingNotifications(1)[0];
       if (!entry) break;
       if (entry.state !== 'pending') continue;
-      const message = this.store.claimDelivery(entry.notification.id, (this.clock?.now() ?? new Date()).toISOString());
+      const now = (this.clock?.now() ?? new Date()).toISOString();
+      const message = this.store.claimDelivery(entry.notification.id, now, this.channel.deliveryBinding?.(entry.notification, now));
       if (!message) continue;
       let result: DeliveryResult;
       try {
-        result = context ? await context.call(signal => this.channel.send(message.notification, signal), timeoutMs)
-          : await this.channel.send(message.notification);
+        const send = (signal?: AbortSignal) => this.channel.sendClaim ? this.channel.sendClaim(message, signal) : this.channel.send(message.notification, signal);
+        result = context ? await context.call(send, timeoutMs) : await send();
       }
       catch { result = { status: 'unknown', reason: 'Provider call failed; verify before retrying.' }; }
       this.store.finishDelivery(message.attemptId, result, (this.clock?.now() ?? new Date()).toISOString());

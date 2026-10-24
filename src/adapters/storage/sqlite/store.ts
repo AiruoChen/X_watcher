@@ -1,11 +1,14 @@
 import type { SQLInputValue } from 'node:sqlite';
+import type { DeliveryBinding, DeliveryRecord, DeliveryResolution, MailAudit } from '../../../domain/model.js';
+import { resolvedDeliveryState, validateBinding } from '../../../domain/policies/mail.js';
 import type { AnalysisCommit, IngestionCommit, PollCommit, WatchStore } from '../../../domain/ports.js';
 import type { AnalysisJob, AnalysisResult, AnalyzedPost, Checkpoint, Coverage, DeliveryAttempt, DeliveryClaim,
   DeliveryResult, DigestReport, DigestWindow, Notification, OutboxEntry, PostVersion, RuleEvent, SourceQuery, TargetIdentity } from '../../../domain/model.js';
+import { validateReanalysis } from '../../../domain/policies/reanalysis.js';
 import { RevisionConflictError } from '../../../domain/errors.js';
 import { stableId } from '../../../domain/identifiers.js';
 import { isInstant } from '../../../domain/time.js';
-import { covers } from '../../../domain/policies/coverage.js';
+import { covers, validIngestionCoverage } from '../../../domain/policies/coverage.js';
 import { requireRevision, transitionJob, transitionDelivery } from '../../../domain/policies/state.js';
 import { validatePost, validateAnalysis } from '../../../domain/validation.js';
 import { openDatabase } from './connection.js';
@@ -71,7 +74,7 @@ export class SqliteStore implements WatchStore {
     this.write(() => {
       const checkpoint = this.checkpoint(commit.targetId), target = this.target(commit.targetId), range = commit.coverage;
       requireRevision(checkpoint.revision, commit.expectedRevision);
-      if (!target || range.targetId !== target.id || range.status !== 'complete' || range.reason !== null
+      if (!target || range.targetId !== target.id || !validIngestionCoverage(range, target.provider)
         || !isInstant(range.from) || !isInstant(range.to) || Date.parse(range.from) >= Date.parse(range.to)
         || range.to !== commit.observedAt || (checkpoint.observedAt !== null && Date.parse(range.to) < Date.parse(checkpoint.observedAt))) throw new Error('Invalid complete coverage.');
       for (const post of commit.posts) {
@@ -137,6 +140,14 @@ export class SqliteStore implements WatchStore {
   pendingAnalysisJobs(targetId: string, now: string, limit: number): readonly AnalysisJob[] {
     this.limit(limit); if (!isInstant(now)) throw new Error('Invalid queue time.');
     return this.rows("SELECT payload FROM analysis_jobs WHERE target_id=? AND state IN ('pending','retry_wait') AND (next_ms IS NULL OR next_ms<=?) ORDER BY seq LIMIT ?", targetId, Date.parse(now), limit);
+  }
+  queueAnalysis(job: AnalysisJob): AnalysisJob {
+    return this.write(() => {
+      validateReanalysis(job, this.postVersion(job.postKey));
+      this.db.prepare('INSERT INTO analysis_jobs(id,post_key,target_id,state,revision,next_ms,payload) VALUES(?,?,?,?,?,?,?) ON CONFLICT(id) DO NOTHING')
+        .run(job.id, job.postKey, job.targetId, job.state, job.revision, null, pack(job));
+      return this.one<AnalysisJob>('SELECT payload FROM analysis_jobs WHERE id=?', job.id)!;
+    });
   }
   claimAnalysis(id: string, now: string): AnalysisJob | null {
     if (!isInstant(now)) throw new Error('Invalid claim time.');
@@ -227,17 +238,49 @@ export class SqliteStore implements WatchStore {
     this.limit(limit);
     return this.entries("SELECT * FROM notifications WHERE state='pending' ORDER BY (CASE WHEN json_extract(payload,'$.kind') IN ('reset','correction') THEN 0 ELSE 1 END),seq LIMIT ?", limit);
   }
-  claimDelivery(id: string, now: string): DeliveryClaim | null {
+  deliveryRecord(id: string): DeliveryRecord | null {
+    const row = this.db.prepare(`SELECT n.*, a.payload AS attempt_payload FROM notifications n
+      LEFT JOIN delivery_attempts a ON a.notification_id=n.id AND a.number=(SELECT MAX(number) FROM delivery_attempts WHERE notification_id=n.id)
+      WHERE n.id=?`).get(id);
+    if (!row) return null;
+    return { entry: { notification: JSON.parse(String(row['payload'])) as Notification, state: row['state'] as OutboxEntry['state'],
+      result: row['result'] === null ? null : JSON.parse(String(row['result'])) as DeliveryResult },
+      revision: Number(row['revision']), attempt: row['attempt_payload'] === null ? null : JSON.parse(String(row['attempt_payload'])) as DeliveryAttempt };
+  }
+  resolveDelivery(command: DeliveryResolution): DeliveryRecord {
+    return this.write(() => {
+      const record = this.deliveryRecord(command.notificationId);
+      if (!record) throw new Error('Unknown notification.');
+      const state = resolvedDeliveryState(record, command);
+      const result = state === 'pending' ? null : command.receipt?.providerId
+        ? { status: 'accepted' as const, providerId: command.receipt.providerId } : record.entry.result;
+      const changed = this.db.prepare('UPDATE notifications SET state=?,result=?,revision=revision+1 WHERE id=? AND revision=?')
+        .run(state, result === null ? null : pack(result), command.notificationId, command.expectedRevision);
+      if (Number(changed.changes) !== 1) throw new RevisionConflictError();
+      const audit: MailAudit = { ...command, kind: 'mail_resolution', resultingState: state };
+      this.db.prepare('INSERT INTO audit_events(payload) VALUES(?)').run(pack(audit));
+      return this.deliveryRecord(command.notificationId)!;
+    });
+  }
+  mailAudits(id: string): readonly MailAudit[] {
+    return this.rows("SELECT payload FROM audit_events WHERE json_extract(payload,'$.kind')='mail_resolution' AND json_extract(payload,'$.notificationId')=? ORDER BY seq", id);
+  }
+  claimDelivery(id: string, now: string, proposedBinding?: DeliveryBinding): DeliveryClaim | null {
     if (!isInstant(now)) throw new Error('Invalid delivery time.');
     return this.write(() => {
       const entry = this.entries('SELECT * FROM notifications WHERE id=?', id)[0];
       if (!entry || entry.state !== 'pending') return null;
       const row = this.db.prepare('SELECT MAX(number) number FROM delivery_attempts WHERE notification_id=?').get(id)!;
       const number = Number(row['number'] ?? 0) + 1, attemptId = stableId('attempt', id, String(number));
-      const attempt: DeliveryAttempt = { id: attemptId, notificationId: id, number, startedAt: now, finishedAt: null, result: null };
+      const previous = this.deliveryRecord(id)!;
+      const binding = previous.attempt ? previous.attempt.binding : proposedBinding;
+      if (binding) { validateBinding(binding); if (number > binding.maxAttempts) return null; }
+      if (previous.attempt && !binding && proposedBinding) throw new Error('Legacy delivery has no saved mail identity.');
+      const savedBinding = binding ? { binding: structuredClone(binding) } : {};
+      const attempt: DeliveryAttempt = { id: attemptId, notificationId: id, number, startedAt: now, finishedAt: null, result: null, ...savedBinding };
       this.db.prepare('INSERT INTO delivery_attempts(id,notification_id,number,payload,claimed_by) VALUES(?,?,?,?,?)').run(attemptId, id, number, pack(attempt), this.runtime.workerId());
-      this.db.prepare('UPDATE notifications SET state=? WHERE id=?').run(transitionDelivery(entry.state, 'sending'), id);
-      return { attemptId, notification: entry.notification };
+      this.db.prepare('UPDATE notifications SET state=?,revision=revision+1 WHERE id=?').run(transitionDelivery(entry.state, 'sending'), id);
+      return { attemptId, notification: entry.notification, ...savedBinding };
     });
   }
   private assertClaim(table: 'analysis_jobs' | 'delivery_attempts', id: string): void {
@@ -249,7 +292,7 @@ export class SqliteStore implements WatchStore {
     if (attempt.result !== null || !isInstant(now)) throw new Error('Invalid delivery attempt.');
     const state = transitionDelivery(row['state'] as OutboxEntry['state'], result.status === 'accepted' ? 'provider_accepted' : result.status === 'rejected' ? 'failed' : 'needs_attention');
     this.db.prepare('UPDATE delivery_attempts SET payload=? WHERE id=?').run(pack({ ...attempt, finishedAt: now, result }), attempt.id);
-    this.db.prepare('UPDATE notifications SET state=?,result=? WHERE id=?').run(state, pack(result), attempt.notificationId);
+    this.db.prepare('UPDATE notifications SET state=?,result=?,revision=revision+1 WHERE id=?').run(state, pack(result), attempt.notificationId);
   }
   finishDelivery(attemptId: string, result: DeliveryResult, now: string): void {
     this.write(() => {

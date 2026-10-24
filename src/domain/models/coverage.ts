@@ -8,11 +8,13 @@ export interface Checkpoint {
 export interface PostBatch {
   readonly posts: readonly Post[];
   readonly nextCursor: string | null;
-  /** False means pagination or retrieval is incomplete; never advance the checkpoint. */
+  /** False means retrieval of this response is incomplete; never advance the checkpoint.
+   * A complete feed response may still have unverified temporal coverage. */
   readonly complete: boolean;
   /** Optional earlier start for explicit overlap; end must equal the fixed requested boundary. */
   readonly coverage?: SourceQuery;
-  readonly scope?: 'x_recent_public_index';
+  readonly coverageStatus?: 'complete' | 'unverified';
+  readonly scope?: 'x_recent_public_index' | 'rsshub_timeline_snapshot';
 }
 
 export interface SourceQuery { readonly from: string; readonly to: string }
@@ -21,5 +23,5 @@ export interface Coverage extends SourceQuery {
   readonly targetId: string;
   readonly status: 'complete' | 'gap';
   readonly reason: string | null;
-  readonly scope?: 'x_recent_public_index';
+  readonly scope?: 'x_recent_public_index' | 'rsshub_timeline_snapshot';
 }

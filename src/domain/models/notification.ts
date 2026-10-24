@@ -21,6 +21,7 @@ export interface OutboxEntry {
   readonly result: DeliveryResult | null;
 }
 export interface DeliveryAttempt {
+  readonly binding?: import('./mail.js').DeliveryBinding;
   readonly id: string;
   readonly notificationId: string;
   readonly number: number;
@@ -29,6 +30,7 @@ export interface DeliveryAttempt {
   readonly result: DeliveryResult | null;
 }
 export interface DeliveryClaim {
+  readonly binding?: import('./mail.js').DeliveryBinding;
   readonly attemptId: string;
   readonly notification: Notification;
 }

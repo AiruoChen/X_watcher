@@ -42,3 +42,7 @@ B04 已增加官方 X 只读来源，实际账号联调待 Token 配置，模型
 PostBatch.coverage 可显式向前重叠，结束点必须匹配固定查询；Coverage.scope=x_recent_public_index 表示公开搜索索引的范围，不等于全部历史。SourceCoverageGap 记录不可查询日期，SourceFailure 只传白名单代码、是否可重试和可选等待时间。调度保存 failureCode/retryNotBeforeAt；重启不缩短供应商硬等待。更多协议边界见 [X 接入说明](integrations/x.md)。
 
 单次 demo 连接各阶段；常驻独立调度、跨进程执行权、停止恢复和全局重试唤醒仍属于 B02/B03。B02 的 SQLite 租约与领取者围栏已验证跨进程互斥；运行宿主仍须在 B03 显式组装和续租，不能仅凭构造 Store 就宣称后台服务已获得执行权。
+
+## RSSHub 合同增量（v0.6）
+
+Post.origin / PostVersion.completeness 新增 unknown，kind 新增 unknown。PostBatch.complete 只描述该响应是否读完，coverageStatus=unverified 与 scope=rsshub_timeline_snapshot 必须同时出现；摄取原子保存 gap（reason=rsshub_snapshot_unverified）及观察检查点，不能证明时间覆盖。存储仅允许这个明确组合在摄取事务中写 gap，旧官方完整查询合同不变。目标/作者使用独立 RSSHub handle 身份，不声称数字 X ID；schema 保持 3。详细边界见 [RSSHub 指南](integrations/rsshub.md)。

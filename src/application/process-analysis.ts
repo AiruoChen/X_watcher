@@ -16,7 +16,8 @@ export class ProcessAnalysis {
       if (!job) continue;
       try {
         const post = this.store.postVersion(job.postKey)!;
-        if (post.completeness !== 'full') { this.store.failAnalysis(job.id, job.revision, null); continue; }
+        if ((post.completeness !== 'full' && !this.analyzer.supportsPartial)
+          || (this.analyzer.version !== undefined && (job.analyzerVersion !== this.analyzer.version || job.promptVersion !== this.analyzer.promptVersion))) { this.store.failAnalysis(job.id, job.revision, null); continue; }
         const analysis = context ? await context.call(signal => this.analyzer.analyze(post, signal), this.config.services.analysis.timeoutMs)
           : await this.analyzer.analyze(post);
         context?.signal.throwIfAborted();
@@ -32,7 +33,8 @@ export class ProcessAnalysis {
             ruleId: rule.id, ruleVersion: rule.version ?? 'v1', createdAt: now });
           const finding = (analysis as Partial<VersionedAnalysis>).resetFinding;
           const normalized = finding && finding.kind !== 'none' ? finding.normalizedAt : null;
-          const eligible = resetEligible(post.publishedAt, post.discoveredAt, identity.monitorStartedAt, this.config.policy.resetMaxAgeMs, normalized);
+          const eligible = resetEligible(post.publishedAt, post.discoveredAt, identity.monitorStartedAt, this.config.policy.resetMaxAgeMs, normalized)
+            && resetEligible(post.publishedAt, now, identity.monitorStartedAt, this.config.policy.resetMaxAgeMs, normalized);
           if (job.emitNotifications && eligible) output.forEach((message, index) => notifications.push({ ...message,
             id: stableId('notification', eventId, String(index)), originId: eventId, configRevision: this.config.revision }));
         }

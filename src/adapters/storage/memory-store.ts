@@ -1,9 +1,12 @@
+import type { DeliveryBinding, DeliveryRecord, DeliveryResolution, MailAudit } from '../../domain/model.js';
+import { resolvedDeliveryState, validateBinding } from '../../domain/policies/mail.js';
 import type { AnalysisCommit, IngestionCommit, PollCommit, WatchStore } from '../../domain/ports.js';
 import type { AnalysisJob, AnalysisResult, AnalyzedPost, Checkpoint, Coverage, DeliveryAttempt, DeliveryClaim, DeliveryResult, DigestReport, DigestWindow, Notification, OutboxEntry, PostVersion, RuleEvent, SourceQuery, TargetIdentity } from '../../domain/model.js';
+import { validateReanalysis } from '../../domain/policies/reanalysis.js';
 import { RevisionConflictError } from '../../domain/errors.js';
 import { isInstant } from '../../domain/time.js';
 import { stableId } from '../../domain/identifiers.js';
-import { covers } from '../../domain/policies/coverage.js';
+import { covers, validIngestionCoverage } from '../../domain/policies/coverage.js';
 import { requireRevision, transitionJob, transitionDelivery } from '../../domain/policies/state.js';
 import { validateAnalysis, validatePost } from '../../domain/validation.js';
 
@@ -22,6 +25,28 @@ export class MemoryStore implements WatchStore {
   private reportData = new Map<string, DigestReport>();
   private attempts = new Map<string, DeliveryAttempt>();
   private messages = new Map<string, OutboxEntry>();
+  private mailRevisions = new Map<string, number>();
+  private mailAuditData: MailAudit[] = [];
+  deliveryRecord(id: string): DeliveryRecord | null {
+    const entry = this.messages.get(id);
+    return entry ? structuredClone({ entry, revision: this.mailRevisions.get(id) ?? 0,
+      attempt: [...this.attempts.values()].filter(a => a.notificationId === id).at(-1) ?? null }) : null;
+  }
+  resolveDelivery(command: DeliveryResolution): DeliveryRecord {
+    const record = this.deliveryRecord(command.notificationId);
+    if (!record) throw new Error('Unknown notification.');
+    const state = resolvedDeliveryState(record, command);
+    const savedAudit: MailAudit = structuredClone({ ...command, kind: 'mail_resolution', resultingState: state });
+    const result = state === 'pending' ? null : command.receipt?.providerId
+      ? { status: 'accepted' as const, providerId: command.receipt.providerId } : record.entry.result;
+    this.messages.set(command.notificationId, { ...record.entry, state, result });
+    this.mailRevisions.set(command.notificationId, record.revision + 1);
+    this.mailAuditData.push(savedAudit);
+    return this.deliveryRecord(command.notificationId)!;
+  }
+  mailAudits(id: string): readonly MailAudit[] {
+    return structuredClone(this.mailAuditData.filter(a => a.notificationId === id));
+  }
 
   checkpoint(targetId: string): Checkpoint {
     return structuredClone(this.checkpoints.get(targetId) ?? { revision: 0, cursor: null, observedAt: null });
@@ -111,7 +136,7 @@ export class MemoryStore implements WatchStore {
     const target = this.identities.get(commit.targetId), coverage = commit.coverage;
     const previousTime = this.checkpoint(commit.targetId).observedAt;
     if (previousTime !== null && Date.parse(commit.observedAt) < Date.parse(previousTime)) throw new Error('Checkpoint cannot move backward.');
-    if (!target || coverage.targetId !== target.id || coverage.status !== 'complete' || coverage.reason !== null
+    if (!target || coverage.targetId !== target.id || !validIngestionCoverage(coverage, target.provider)
       || !isInstant(coverage.from) || !isInstant(coverage.to)
       || Date.parse(coverage.from) >= Date.parse(coverage.to) || coverage.to !== commit.observedAt) throw new Error('Invalid complete coverage.');
     const raw = structuredClone(this.raw), jobs = structuredClone(this.jobs), ranges = structuredClone(this.ranges);
@@ -158,6 +183,12 @@ export class MemoryStore implements WatchStore {
   }
   versions(targetId: string): readonly PostVersion[] { return structuredClone([...this.raw.values()].filter(p => p.targetId === targetId)); }
   analysisJobs(targetId: string): readonly AnalysisJob[] { return structuredClone([...this.jobs.values()].filter(j => j.targetId === targetId)); }
+  queueAnalysis(job: AnalysisJob): AnalysisJob {
+    validateReanalysis(job, this.postVersion(job.postKey));
+    const previous = this.jobs.get(job.id);
+    if (previous) return structuredClone(previous);
+    this.jobs.set(job.id, structuredClone(job)); return structuredClone(job);
+  }
   claimAnalysis(id: string, now: string): AnalysisJob | null {
     if (!isInstant(now)) throw new Error('Invalid claim time.');
     const job = this.jobs.get(id);
@@ -224,15 +255,21 @@ export class MemoryStore implements WatchStore {
     return true;
   }
   reports(targetId: string): readonly DigestReport[] { return structuredClone([...this.reportData.values()].filter(r => r.targetId === targetId)); }
-  claimDelivery(id: string, now: string): DeliveryClaim | null {
+  claimDelivery(id: string, now: string, proposedBinding?: DeliveryBinding): DeliveryClaim | null {
     const entry = this.messages.get(id);
     if (!entry || entry.state !== 'pending') return null;
     if (!isInstant(now)) throw new Error('Invalid delivery time.');
     const number = [...this.attempts.values()].filter(a => a.notificationId === id).length + 1;
+    const previous = this.deliveryRecord(id)!;
+    const binding = previous.attempt ? previous.attempt.binding : proposedBinding;
+    if (binding) { validateBinding(binding); if (number > binding.maxAttempts) return null; }
+    if (previous.attempt && !binding && proposedBinding) throw new Error('Legacy delivery has no saved mail identity.');
+    const savedBinding = binding ? { binding: structuredClone(binding) } : {};
     const attemptId = stableId('attempt', id, String(number));
-    this.attempts.set(attemptId, { id: attemptId, notificationId: id, number, startedAt: now, finishedAt: null, result: null });
+    this.attempts.set(attemptId, { id: attemptId, notificationId: id, number, startedAt: now, finishedAt: null, result: null, ...savedBinding });
+    this.mailRevisions.set(id, previous.revision + 1);
     this.messages.set(id, { ...entry, state: transitionDelivery(entry.state, 'sending') });
-    return { attemptId, notification: structuredClone(entry.notification) };
+    return structuredClone({ attemptId, notification: entry.notification, ...savedBinding });
   }
   finishDelivery(attemptId: string, result: DeliveryResult, now: string): void {
     const attempt = this.attempts.get(attemptId), entry = attempt ? this.messages.get(attempt.notificationId) : undefined;
@@ -241,6 +278,7 @@ export class MemoryStore implements WatchStore {
     const copy = structuredClone(result);
     this.attempts.set(attemptId, { ...attempt, finishedAt: now, result: copy });
     this.messages.set(attempt.notificationId, { ...entry, state, result: copy });
+    this.mailRevisions.set(attempt.notificationId, (this.mailRevisions.get(attempt.notificationId) ?? 0) + 1);
   }
   deliveryAttempts(): readonly DeliveryAttempt[] { return structuredClone([...this.attempts.values()]); }
 }

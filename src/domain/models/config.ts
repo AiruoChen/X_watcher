@@ -9,11 +9,15 @@ export interface RuntimeConfig {
     readonly maxConcurrent: number; readonly batchSize: number };
   readonly x: { readonly maxPages: number; readonly pageSize: number; readonly requestTimeoutMs: number;
     readonly safetyLagMs: number; readonly overlapMs: number; readonly fieldDialect: 'post' | 'tweet' };
+  readonly rsshub: { readonly baseUrl: string; readonly itemLimit: number; readonly requestTimeoutMs: number;
+    readonly overlapMs: number; readonly safetyLagMs: number };
   readonly services: {
     readonly source: ServiceConfig;
     readonly analysis: ServiceConfig & { readonly model: string | null; readonly version: string; readonly promptVersion: string };
     readonly mail: ServiceConfig & { readonly from: string | null };
   };
+  readonly analysisPolicy: { readonly allowPartial: boolean };
+  readonly mailPolicy: { readonly account: string | null; readonly idempotencyTtlMs: number; readonly maxAttempts: number };
   readonly budget: { readonly maxCallsPerDay: number | null; readonly maxCostPerDay: number | null };
   readonly mode: 'demo' | 'preview' | 'live';
   readonly targets: readonly WatchTarget[];

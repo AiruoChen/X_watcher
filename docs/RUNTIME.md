@@ -73,3 +73,7 @@ Schema 3 新增 `runtime_tasks`，以稳定 ID 标识每目标 ingest、analysis
 ## 验证
 
 `tests/runtime.test.ts` 使用真实 SQLite、注入时钟和合成数据，覆盖持久化退避、CAS、慢来源隔离、整天/跨日/08:00、离线数日、墙钟前后跳变、续租互斥、强杀进程恢复、正常停止、停止超时、迟到响应与落盘失败。所有外部服务为模拟。执行 check、test、demo、storage:demo、runtime:demo；CI 覆盖 Linux/Windows × Node 22.12/24。
+
+## RSSHub 运行（v0.6）
+
+使用 rsshub:probe / rsshub:preview 或 source:*，运行层无需 RSSHub 依赖，沿用 30 分钟抓取和持久化重试。watch 继续模拟，preview 不调用分析、日报和邮件。HTTP 成功只更新快照观察检查点，覆盖仍未验证；真实配置/Compose/后续模块见 [RSSHub 指南](integrations/rsshub.md)。

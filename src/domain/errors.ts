@@ -10,7 +10,7 @@ export type SourceFailureCode = 'authentication' | 'permission' | 'not_found' | 
 /** Only allowlisted codes/times cross into scheduling and logs, never response bodies or secrets. */
 export class SourceFailure extends Error {
   constructor(readonly code: SourceFailureCode, readonly retryable: boolean, readonly retryAt: string | null = null) {
-    super(`X source failed: ${code}`);
+    super(`Post source failed: ${code}`);
   }
 }
 export class SourceCoverageGap extends SourceFailure {

@@ -24,5 +24,9 @@ export function inspectDatabase(db: DatabaseSync): number {
       if (!db.prepare("SELECT 1 FROM sqlite_master WHERE type='index' AND name=?").get(index)) throw new Error('Missing runtime index.');
     }
   }
+  if (version >= 4) {
+    db.prepare('SELECT revision FROM notifications LIMIT 0').all();
+    if (!db.prepare("SELECT 1 FROM sqlite_master WHERE type='index' AND name='mail_audit_notification'").get()) throw new Error('Missing mail audit index.');
+  }
   return version;
 }
