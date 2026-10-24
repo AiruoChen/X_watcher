@@ -1,23 +1,28 @@
 import type { Clock, WatchStore } from '../domain/ports.js';
 import type { DigestWindow, RuntimeConfig, WatchTarget } from '../domain/model.js';
 import { digestWindowForDay, dueDigestWindow, shiftDay } from '../domain/time.js';
+import { latestReportDay } from '../domain/policies/reporting.js';
 
-/** B03 triggers existing immutable reports. Late-post correction/degraded reports belong to B07. */
+/** Persist a compact skipped range; published days remain eligible for later addenda. */
 export class DueDigests {
-  constructor(private readonly store: WatchStore, private readonly clock: Clock, private readonly config: RuntimeConfig) {}
+  constructor(private readonly store: WatchStore, private readonly clock: Clock,
+    private readonly config: RuntimeConfig, private readonly includePublished = false) {}
   execute(target: WatchTarget): readonly DigestWindow[] {
     const identity = this.store.target(target.id);
     if (!identity) return [];
-    const now = this.clock.now();
-    const yesterday = dueDigestWindow(now, this.config.timeZone, '00:00')!.day;
-    const latest = dueDigestWindow(now, this.config.timeZone, this.config.dailyDigestAt)?.day ?? shiftDay(yesterday, -1);
-    const first = shiftDay(dueDigestWindow(new Date(identity.monitorStartedAt), this.config.timeZone, '00:00')!.day,
+    const latest = latestReportDay(this.clock.now(), this.config.timeZone, this.config.dailyDigestAt);
+    const previous = this.store.reportBoundary(target.id);
+    const first = previous?.firstDay ?? shiftDay(dueDigestWindow(new Date(identity.monitorStartedAt), this.config.timeZone, '00:00')!.day,
       1 - this.config.policy.initialBackfillDays);
-    const reported = new Set(this.store.reports(target.id).map(report => report.day));
+    const cutoff = shiftDay(latest, 1 - this.config.policy.digestCatchUpDays);
+    const beforeDay = [first, cutoff, previous?.beforeDay ?? first].sort().at(-1)!;
+    if (!previous || beforeDay !== previous.beforeDay)
+      this.store.recordReportBoundary({ targetId: target.id, firstDay: first, beforeDay });
+    const reported = this.includePublished ? new Set<string>() : new Set(this.store.reports(target.id).map(report => report.day));
     const windows: DigestWindow[] = [];
     for (let offset = 1 - this.config.policy.digestCatchUpDays; offset <= 0; offset++) {
       const day = shiftDay(latest, offset);
-      if (day >= first && !reported.has(day)) windows.push(digestWindowForDay(day, this.config.timeZone));
+      if (day >= beforeDay && !reported.has(day)) windows.push(digestWindowForDay(day, this.config.timeZone));
     }
     return windows;
   }

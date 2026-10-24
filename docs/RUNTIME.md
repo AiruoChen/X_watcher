@@ -77,3 +77,9 @@ Schema 3 新增 `runtime_tasks`，以稳定 ID 标识每目标 ingest、analysis
 ## RSSHub 运行（v0.6）
 
 使用 rsshub:probe / rsshub:preview 或 source:*，运行层无需 RSSHub 依赖，沿用 30 分钟抓取和持久化重试。watch 继续模拟，preview 不调用分析、日报和邮件。HTTP 成功只更新快照观察检查点，覆盖仍未验证；真实配置/Compose/后续模块见 [RSSHub 指南](integrations/rsshub.md)。
+
+## v0.8 日报运行更新
+
+常驻日报阶段已使用 B07 BuildReport，08:00 必要补查通过既有 ingest 任务执行；慢调用不重叠，失败与服务端等待时间继续使用持久退避。日期用墙钟和配置时区，等待用单调计时，墙钟跳变不绕过轮询间隔。首次发现历史待补日期先保存等待，后续仍未恢复才创建异常提醒，避免健康重启正在补查时误报。
+
+日报支持 08:15 摘录降级、最近 7 日从早到晚补报、每轮邮件上限和历史修订；源码 preview 模式仍不运行分析/日报/邮件。完整说明、本地报告命令和离线 reporting:demo 见 [REPORTING.md](REPORTING.md)。真实全链路/时效验收仍待后续。

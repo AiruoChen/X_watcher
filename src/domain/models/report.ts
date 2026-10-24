@@ -3,7 +3,7 @@ export interface DigestWindow {
   readonly from: string;
   readonly to: string;
 }
-export type ReportState = 'awaiting_data' | 'awaiting_analysis' | 'ready' | 'empty' | 'superseded';
+export type ReportState = 'awaiting_data' | 'awaiting_analysis' | 'ready' | 'empty' | 'partial' | 'superseded';
 export interface DigestReport extends DigestWindow {
   readonly id: string;
   readonly targetId: string;

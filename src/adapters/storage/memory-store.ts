@@ -1,3 +1,7 @@
+import { createHash } from 'node:crypto';
+import type { ReportBoundary, ReportCommit, ReportInputs, ReportProgress, ReportSnapshot, SourceObservation } from '../../domain/model.js';
+import { buildReportInputs, validateObservation } from '../../domain/policies/report-inputs.js';
+import { validBoundary, validateReportCommit } from '../../domain/policies/reporting.js';
 import type { DeliveryBinding, DeliveryRecord, DeliveryResolution, MailAudit } from '../../domain/model.js';
 import { deliveryOutcome } from '../../domain/policies/mail-retry.js';
 import { resolvedDeliveryState, validateBinding } from '../../domain/policies/mail.js';
@@ -30,6 +34,42 @@ export class MemoryStore implements WatchStore {
   private messages = new Map<string, OutboxEntry>();
   private mailRevisions = new Map<string, number>();
   private mailAuditData: MailAudit[] = [];
+  private observations = new Map<string, SourceObservation>();
+  private reportStates = new Map<string, ReportProgress>();
+  private boundaries = new Map<string, ReportBoundary>();
+  reportProgress(targetId: string, day: string): ReportProgress | null { return structuredClone(this.reportStates.get(key(targetId, day)) ?? null); }
+  reportBoundary(targetId: string): ReportBoundary | null { return structuredClone(this.boundaries.get(targetId) ?? null); }
+  recordReportBoundary(boundary: ReportBoundary): void {
+    if (!this.identities.has(boundary.targetId)) throw new Error('Unknown report target.');
+    validBoundary(boundary, this.reportBoundary(boundary.targetId)); this.boundaries.set(boundary.targetId, structuredClone(boundary));
+  }
+  reportInputs(targetId: string, window: DigestWindow): ReportInputs {
+    if (!this.target(targetId)) throw new Error('Unknown report target.');
+    const previous = this.reports(targetId).filter(r => r.day === window.day).sort((a, b) => a.revision - b.revision).at(-1) ?? null;
+    const previousItems = (previous as Partial<ReportSnapshot> | null)?.items ?? (previous?.postKeys.map(k => {
+      const post = this.postVersion(k); if (!post) throw new Error('Missing old report source.');
+      return { post, result: this.analysisResults(k).filter(r => Date.parse(r.completedAt) <= Date.parse(previous.createdAt)).at(-1) ?? null };
+    }) ?? []);
+    return buildReportInputs({ targetId, window, checkpoint: this.checkpoint(targetId), observation: this.observations.get(targetId) ?? null,
+      boundary: this.reportBoundary(targetId), coverage: this.coverage(targetId), progress: this.reportProgress(targetId, window.day),
+      previous, previousItems, items: [...this.latestVersions(targetId, window)].sort((a, b) => a.id.localeCompare(b.id))
+        .map(post => ({ post, result: this.analysisResult(post.key) })) });
+  }
+  commitReport(command: ReportCommit): boolean {
+    const current = this.reportInputs(command.inputs.targetId, command.inputs.window);
+    validateReportCommit(current, command);
+    if (command.snapshot && createHash('sha256').update(command.snapshot.text).digest('hex') !== command.snapshot.contentHash) throw new Error('Report hash mismatch.');
+    const saved = structuredClone(command), messages = structuredClone(this.messages);
+    for (const n of saved.notifications) {
+      const old = messages.get(n.id);
+      if (old && JSON.stringify(old.notification) !== JSON.stringify(n)) throw new Error('Report notification collision.');
+      if (!old) messages.set(n.id, { notification: n, state: 'pending', result: null });
+    }
+    if (saved.snapshot && this.reportData.has(saved.snapshot.id)) throw new RevisionConflictError();
+    if (saved.snapshot) this.reportData.set(saved.snapshot.id, saved.snapshot);
+    this.reportStates.set(key(current.targetId, current.window.day), saved.progress); this.messages = messages;
+    return saved.notifications.length > 0;
+  }
   deliveryRecord(id: string): DeliveryRecord | null {
     const entry = this.messages.get(id);
     return entry ? structuredClone({ entry, revision: this.mailRevisions.get(id) ?? 0,
@@ -137,6 +177,7 @@ export class MemoryStore implements WatchStore {
   }
   target(id: string): TargetIdentity | null { return structuredClone(this.identities.get(id) ?? null); }
   commitIngestion(commit: IngestionCommit): void {
+    validateObservation(commit.observation);
     requireRevision(this.checkpoint(commit.targetId).revision, commit.expectedRevision);
     const target = this.identities.get(commit.targetId), coverage = commit.coverage;
     const previousTime = this.checkpoint(commit.targetId).observedAt;
@@ -167,6 +208,7 @@ export class MemoryStore implements WatchStore {
     ranges.set(coverage.id, structuredClone(coverage));
     this.raw = raw; this.jobs = jobs; this.ranges = ranges;
     this.checkpoints.set(target.id, { revision: commit.expectedRevision + 1, cursor: commit.cursor, observedAt: commit.observedAt });
+    if (commit.observation) this.observations.set(target.id, { ...commit.observation, checkpointRevision: commit.expectedRevision + 1 });
   }
   recordCoverageGap(gap: Coverage, expectedRevision: number): void {
     requireRevision(this.checkpoint(gap.targetId).revision, expectedRevision);

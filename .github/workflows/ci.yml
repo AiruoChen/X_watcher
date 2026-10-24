@@ -24,4 +24,5 @@ jobs:
       - run: npm run storage:demo
       - run: npm run runtime:demo
       - run: npm run modules:demo
+      - run: npm run reporting:demo
       - run: npm run eval:reset

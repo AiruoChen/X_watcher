@@ -13,6 +13,8 @@ export class WorkflowScheduler {
   private cursor = 0;
   private digestEmails = 0;
   private failure: unknown;
+  private lastPulse: { wall: number; mono: number } | undefined;
+  private forceAfter = 0;
   constructor(private readonly config: RuntimeConfig, private readonly clock: Clock,
     private readonly state: RuntimeState, private readonly jobs: RuntimeJobs, private readonly events: EventSink,
     private readonly random: () => number = Math.random) {}
@@ -37,6 +39,10 @@ export class WorkflowScheduler {
   pulse(context: ExecutionContext): void {
     if (!this.accepting || context.signal.aborted || this.failure) return;
     this.digestEmails = 0;
+    const wall = this.clock.now().getTime(), mono = this.clock.monotonicMs();
+    if (this.lastPulse && Math.abs((wall - this.lastPulse.wall) - (mono - this.lastPulse.mono)) > 60000)
+      this.forceAfter = mono + this.config.pollIntervalMs;
+    this.lastPulse = { wall, mono };
     const tasks = this.state.tasks().filter(task => this.ids.has(task.id));
     const capacity = Math.max(1, Math.floor(this.config.runtime.maxConcurrent / 4));
     const start = this.cursor;
@@ -53,7 +59,11 @@ export class WorkflowScheduler {
         const wait = Math.max(bounded, serverWait);
         deadline = { revision: task.revision, at: this.clock.monotonicMs() + wait }; this.deadlines.set(task.id, deadline);
       }
-      if (this.clock.monotonicMs() < deadline.at) continue;
+      const target = this.config.targets.find(t => t.id === task.targetId);
+      const checkAt = task.stage === 'ingest' && target ? this.jobs.reportCheckAt?.(target) : null;
+      const forceCheck = checkAt && task.failures === 0 && mono >= this.forceAfter
+        && (!task.startedAt || Date.parse(task.startedAt) < Date.parse(checkAt));
+      if (mono < deadline.at && !forceCheck) continue;
       const claimed = this.state.claim(task.id, task.revision, this.clock.now().toISOString());
       if (!claimed) continue;
       const promise = this.execute(claimed, context).catch(error => { this.failure = error; this.stop(); })

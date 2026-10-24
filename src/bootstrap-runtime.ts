@@ -1,10 +1,12 @@
 import type { RuntimeConfig } from './domain/model.js';
-import type { ExecutionContext, RuntimeJobs, RuntimeLeaseControl, RuntimeState, Waiter } from './domain/ports.js';
+import type { ExecutionContext, ReportRenderer, RuntimeJobs, RuntimeLeaseControl, RuntimeState, Waiter } from './domain/ports.js';
 import { validateDependencies, type Dependencies } from './bootstrap.js';
 import { IngestTarget } from './application/ingest-target.js';
 import { ProcessAnalysis } from './application/process-analysis.js';
 import { DeliverNotifications } from './application/deliver-notifications.js';
-import { DailyDigest } from './application/daily-digest.js';
+import { BuildReport } from './application/build-report.js';
+import { ReportTextRenderer } from './application/report-renderer.js';
+import { hasFreshReportCheck, latestReportDay, reportDueAt } from './domain/policies/reporting.js';
 import { DueDigests } from './application/due-digests.js';
 import { RecoverRuntime } from './application/recover-runtime.js';
 import { WorkflowScheduler } from './runtime/workflow-scheduler.js';
@@ -12,6 +14,7 @@ import { RuntimeHost } from './runtime/host.js';
 import { DeadlineContext, TimerWaiter } from './adapters/execution.js';
 
 export interface RuntimeDependencies extends Dependencies {
+  readonly reportRenderer?: ReportRenderer;
   readonly lease: RuntimeLeaseControl;
   readonly state: RuntimeState;
   readonly reconcile: (revision: number) => unknown;
@@ -26,11 +29,18 @@ export function createRuntimeApplication(config: RuntimeConfig, deps: RuntimeDep
   if (config.storage.kind !== 'sqlite' || deps.store.durability !== 'persistent') throw new Error('Runtime requires persistent SQLite storage.');
   const analysis = new ProcessAnalysis(deps.analyzer, deps.store, deps.rules, deps.clock, config);
   const delivery = new DeliverNotifications(deps.store, deps.notifications, deps.clock);
-  const digest = new DailyDigest(deps.store, deps.digestRenderer, config.recipient, deps.hasher, config.timeZone, config.revision);
-  const dueDigests = new DueDigests(deps.store, deps.clock, config);
+  const digest = new BuildReport(deps.store, deps.hasher, deps.reportRenderer ?? new ReportTextRenderer(), config);
+  const dueDigests = new DueDigests(deps.store, deps.clock, config, true);
+  const reportCheckAt = (): string | null => {
+    if (config.mode === 'preview') return null;
+    return reportDueAt(latestReportDay(deps.clock.now(), config.timeZone, config.dailyDigestAt), config.timeZone, config.dailyDigestAt);
+  };
   const jobs: RuntimeJobs = {
     ingest: async (target, context) => {
-      const count = await new IngestTarget(deps.sources.get(target.provider)!, deps.store, deps.clock, config, deps.hasher).execute(target, context);
+      const at = reportCheckAt(), windows = at ? dueDigests.execute(target) : [];
+      const first = windows[0];
+      const recheckFrom = at && first && !hasFreshReportCheck(deps.store.reportInputs(target.id, first), at) ? first.from : undefined;
+      const count = await new IngestTarget(deps.sources.get(target.provider)!, deps.store, deps.clock, config, deps.hasher).execute(target, context, recheckFrom);
       try { deps.events.record({ type: 'poll.completed', targetId: target.id, newPosts: count }); } catch { /* Non-authoritative. */ }
     },
     analyze: (target, context) => config.mode === 'preview' ? Promise.resolve() : analysis.execute(target, context, config.runtime.batchSize),
@@ -42,6 +52,7 @@ export function createRuntimeApplication(config: RuntimeConfig, deps: RuntimeDep
     },
     digest: (target, window) => config.mode === 'preview' ? false : digest.execute(target, window, deps.clock.now().toISOString()),
     digestWindows: target => config.mode === 'preview' ? [] : dueDigests.execute(target),
+    reportCheckAt,
   };
   const scheduler = new WorkflowScheduler(config, deps.clock, deps.state, jobs, deps.events, deps.random);
   const recovery = new RecoverRuntime(deps.reconcile, deps.state, deps.clock);

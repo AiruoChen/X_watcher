@@ -2,6 +2,8 @@ import { isInstant } from '../time.js';
 import type { Coverage, SourceQuery } from '../model.js';
 /** Feed snapshots can be ingested atomically without claiming a complete time interval. */
 export function validIngestionCoverage(range: Coverage, provider: string): boolean {
+  if (range.observation && (!isInstant(range.observation.startedAt) || !isInstant(range.observation.completedAt)
+    || Date.parse(range.observation.completedAt) < Date.parse(range.observation.startedAt))) return false;
   if (provider === 'rsshub-x') return range.status === 'gap' && range.scope === 'rsshub_timeline_snapshot'
     && range.reason === 'rsshub_snapshot_unverified';
   return range.status === 'complete' && range.reason === null && range.scope !== 'rsshub_timeline_snapshot';

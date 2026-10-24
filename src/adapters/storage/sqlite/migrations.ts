@@ -39,6 +39,10 @@ CREATE INDEX mail_audit_notification ON audit_events(json_extract(payload,'$.not
 ` }, { version: 5, sql: `
 ALTER TABLE notifications ADD COLUMN next_delivery_ms INTEGER CHECK(next_delivery_ms IS NULL OR next_delivery_ms>=0);
 CREATE INDEX notification_retry_due ON notifications(state,next_delivery_ms);
+` }, { version: 6, sql: `
+CREATE TABLE source_observations(target_id TEXT PRIMARY KEY REFERENCES targets(id), payload TEXT NOT NULL CHECK(json_valid(payload))) STRICT;
+CREATE TABLE report_progress(target_id TEXT NOT NULL REFERENCES targets(id), day TEXT NOT NULL, revision INTEGER NOT NULL CHECK(revision>=1), payload TEXT NOT NULL CHECK(json_valid(payload)), PRIMARY KEY(target_id,day)) STRICT;
+CREATE TABLE report_boundaries(target_id TEXT PRIMARY KEY REFERENCES targets(id), payload TEXT NOT NULL CHECK(json_valid(payload))) STRICT;
 ` }];
 export const SCHEMA_VERSION = MIGRATIONS.length;
 const checksum = (sql: string): string => createHash('sha256').update(sql).digest('hex');

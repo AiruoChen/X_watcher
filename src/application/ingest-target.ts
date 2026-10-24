@@ -4,12 +4,13 @@ import { stableId } from '../domain/identifiers.js';
 import { IncompleteBatchError, SourceCoverageGap } from '../domain/errors.js';
 import { ResolveTarget } from './resolve-target.js';
 import { validatePost } from '../domain/validation.js';
-import { digestWindowForDay, dueDigestWindow, shiftDay } from '../domain/time.js';
+import { digestWindowForDay, dueDigestWindow, isInstant, shiftDay } from '../domain/time.js';
 
 export class IngestTarget {
   constructor(private readonly source: PostSource, private readonly store: WatchStore,
     private readonly clock: Clock, private readonly config: RuntimeConfig, private readonly hasher: ContentHasher) {}
-  async execute(target: WatchTarget, context?: ExecutionContext): Promise<number> {
+  async execute(target: WatchTarget, context?: ExecutionContext, recheckFrom?: string): Promise<number> {
+    if (recheckFrom && !isInstant(recheckFrom)) throw new Error('Invalid report recheck boundary.');
     context?.signal.throwIfAborted();
     if (this.source.capability === 'real' && this.config.mode === 'demo') throw new Error('Demo cannot call a real source.');
     if (this.source.capability === 'real') await new ResolveTarget(this.source, this.store, this.clock, this.config).execute(target, context);
@@ -28,10 +29,12 @@ export class IngestTarget {
     const yesterday = dueDigestWindow(new Date(discoveredAt), this.config.timeZone, '00:00')!;
     const query = { from: checkpoint.observedAt ?? digestWindowForDay(
       shiftDay(yesterday.day, 1 - this.config.policy.initialBackfillDays), this.config.timeZone).from, to: now };
+    if (recheckFrom && Date.parse(recheckFrom) < Date.parse(query.from)) query.from = recheckFrom;
+    const cursor = recheckFrom ? null : checkpoint.cursor;
     let batch;
     try {
-      batch = context ? await context.call(signal => this.source.fetch(target, checkpoint.cursor, query, signal), this.config.services.source.timeoutMs)
-        : await this.source.fetch(target, checkpoint.cursor, query);
+      batch = context ? await context.call(signal => this.source.fetch(target, cursor, query, signal), this.config.services.source.timeoutMs)
+        : await this.source.fetch(target, cursor, query);
     } catch (error) {
       if (error instanceof SourceCoverageGap) this.store.recordCoverageGap({ ...error.range,
         id: stableId('gap', target.id, error.range.from, error.range.to, error.code), targetId: target.id, status: 'gap', reason: error.code,
@@ -62,10 +65,13 @@ export class IngestTarget {
         configRevision: this.config.revision, emitNotifications: this.config.mode !== 'preview' && (post.origin?.completeness ?? 'full') === 'full',
         state: 'pending', revision: 0, attempts: 0, nextAttemptAt: null });
     }
+    const completedAt = this.clock.now().toISOString();
+    const observation = Date.parse(completedAt) >= Date.parse(discoveredAt) ? { startedAt: discoveredAt, completedAt } : undefined;
     this.store.commitIngestion({ targetId: target.id, expectedRevision: checkpoint.revision,
       cursor: batch.nextCursor, observedAt: now, coverage: { ...coverage, id: stableId('coverage', target.id, coverage.from, coverage.to, batch.scope ?? 'default'),
-        targetId: target.id, status: unverified ? 'gap' : 'complete', reason: unverified ? 'rsshub_snapshot_unverified' : null, ...(batch.scope ? { scope: batch.scope } : {}) },
-      posts: [...posts.values()], jobs: [...jobs.values()] });
+        targetId: target.id, ...(observation ? { observation } : {}), status: unverified ? 'gap' : 'complete', reason: unverified ? 'rsshub_snapshot_unverified' : null, ...(batch.scope ? { scope: batch.scope } : {}) },
+      posts: [...posts.values()], jobs: [...jobs.values()],
+      ...(observation ? { observation } : {}) });
     return posts.size;
   }
 }

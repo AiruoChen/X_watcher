@@ -32,5 +32,8 @@ export function inspectDatabase(db: DatabaseSync): number {
     db.prepare('SELECT next_delivery_ms FROM notifications LIMIT 0').all();
     if (!db.prepare("SELECT 1 FROM sqlite_master WHERE type='index' AND name='notification_retry_due'").get()) throw new Error('Missing retry index.');
   }
+  if (version >= 6) {
+    for (const table of ['source_observations','report_progress','report_boundaries']) db.prepare(`SELECT payload FROM ${table} LIMIT 0`).all();
+  }
   return version;
 }

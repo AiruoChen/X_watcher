@@ -1,8 +1,10 @@
+import type { ReportingStore } from './reporting.js';
 import type { MailStore } from './mail.js';
 import type { LegacyWatchStore } from './legacy.js';
 import type { AnalysisJob, AnalysisResult, Coverage, DeliveryAttempt, DeliveryClaim, DeliveryResult,
   DigestReport, Notification, PostVersion, RuleEvent, SourceQuery, TargetIdentity } from '../model.js';
 export interface IngestionCommit {
+  readonly observation?: { readonly startedAt: string; readonly completedAt: string };
   readonly targetId: string;
   readonly expectedRevision: number;
   readonly cursor: string | null;
@@ -48,7 +50,7 @@ export interface WorkflowStore {
   finishDelivery(attemptId: string, result: DeliveryResult, now: string): void;
   deliveryAttempts(): readonly DeliveryAttempt[];
 }
-export interface WatchStore extends LegacyWatchStore, WorkflowStore, MailStore {}
+export interface WatchStore extends LegacyWatchStore, WorkflowStore, MailStore, ReportingStore {}
 
 export interface ContentHasher { hash(text: string): string }
 

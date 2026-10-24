@@ -106,3 +106,11 @@ flowchart LR
 ```
 
 阶段只通过持久化待办连接，分别保留并发额度。同一目标同阶段使用 revision 互斥。宿主先取得执行权，再隔离其他 worker 的未决领取，最后恢复遗留阶段标记；未知发送始终不重新排队。停止先禁止阶段及批次内新领取，宽限后取消调用，写入结果再释放；失败保留租约和未决记录。墙钟决定自然日，单调时间决定间隔和本进程租约有效期。详细时序、退出码、配置、恢复边界与测试见 [运行说明](RUNTIME.md)。
+
+## B07 日报与补报（v0.8）
+
+常驻组合根改为 DueDigests + BuildReport + 可注入 ReportRenderer，兼容演示保留旧 DailyDigest。ReportingStore 扩展 WatchStore，内存/SQLite 共用领域完整性、变更和快照校验。运行层通过 RuntimeJobs.reportCheckAt 得到必要补查时刻，复用同一 ingest 持久化任务、并发领取与退避；不导入 application 或任何 SDK。
+
+DueDigests 持久化最近 7 日之前的跳过区间，BuildReport 用查询覆盖与补查证明决定等待/摘录/完整状态；历史差异在下一次截止时刻生成父报告关联的 addendum。ReportTextRenderer 复用已保存分析，不新增 LLM 调用。报告事务重验输入 token 和 revision，固定全量版本/分析快照与正文哈希，再原子保存报告、进度和通知。
+
+SQLite schema 6 使用三个小表保留查询观察、等待/事故状态和策略边界，原报告表保留旧 JSON 合同。RSSHub 的未验证覆盖只能显式部分预览，真实模型/邮件和 live 仍未启用。验收和命令见 [REPORTING.md](REPORTING.md)。

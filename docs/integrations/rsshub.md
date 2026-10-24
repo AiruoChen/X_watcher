@@ -101,7 +101,7 @@ npm run rsshub:preview
 1. 真实验证 RSSHub + Cookie，确认目标 feed 可读、登录和缓存行为；连续 preview 运行，记录遗漏限制。
 2. B05：分析器需显式支持未知完整性/部分正文，保留来源限制和引用证据；不能把 unknown 改成 full 来绕过当前保护。增加语义评估集。
 3. B06：接入邮件并验证发送未知结果处理；维持通知快照和去重。
-4. B07：实现“已收集内容”的部分日报和 08:15 异常/降级报告；在主题/正文标注来源、范围和缺口。当前 covers()/DailyDigest 继续要求完整覆盖，所以 RSSHub 不会产出完整日报。
+4. B07（v0.8 业务/离线完成）：`digest:preview <day> --partial` 展示已收集内容并标注可能遗漏；缺口等待、08:15 异常/降级、补报和历史补充合同已实现。完整报告继续要求完整覆盖，所以 RSSHub 不会产出完整日报；source-only preview 不运行报告或邮件。部分来源自动邮件仍须真实服务验收。详见 [日报模块](../REPORTING.md)。
 5. B08/B09：登录失效、长期不更新、恢复通知，镜像固定/升级与生产验收。完成后再评估 live。
 
 真实验收检查：probe 应显示 scope=rsshub_timeline_snapshot、coverage=unverified；preview 应新增帖子/待办和 gap；重复读取不重复建作业；停止重开能继续；断网/HTML 错误/429 不推进失败批次检查点，等待时间跨重启保存；始终没有真实模型/邮件操作。

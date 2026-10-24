@@ -4,3 +4,4 @@ export type * from './ports/store.js';
 export type * from './ports/runtime.js';
 export type * from './ports/analysis.js';
 export type * from './ports/mail.js';
+export type * from './ports/reporting.js';

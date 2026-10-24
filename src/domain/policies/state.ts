@@ -12,7 +12,7 @@ const delivery: Record<DeliveryState, readonly DeliveryState[]> = {
 };
 const reports: Record<ReportState, readonly ReportState[]> = {
   awaiting_data: ['awaiting_analysis', 'ready', 'empty'], awaiting_analysis: ['ready', 'empty'],
-  ready: ['superseded'], empty: ['superseded'], superseded: [],
+  ready: ['superseded'], empty: ['superseded'], partial: ['superseded'], superseded: [],
 };
 function transition<S extends string>(graph: Record<S, readonly S[]>, from: S, to: S): S {
   if (!graph[from]?.includes(to)) throw new Error(`Illegal state transition: ${from} -> ${to}`);

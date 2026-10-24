@@ -19,6 +19,8 @@ export interface PostBatch {
 
 export interface SourceQuery { readonly from: string; readonly to: string }
 export interface Coverage extends SourceQuery {
+  /** Actual successful query times; absent on legacy coverage until explicitly rechecked. */
+  readonly observation?: { readonly startedAt: string; readonly completedAt: string };
   readonly id: string;
   readonly targetId: string;
   readonly status: 'complete' | 'gap';

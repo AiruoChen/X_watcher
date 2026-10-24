@@ -1,6 +1,6 @@
 {
   "name": "x-watcher",
-  "version": "0.7.1",
+  "version": "0.8.0",
   "private": true,
   "type": "module",
   "description": "Modular X monitoring agent: daily digests and reset alerts",
@@ -27,7 +27,11 @@
     "modules:demo": "npm run build && node --experimental-sqlite dist/src/modules-demo.js",
     "eval:reset": "npm run build && node evals/reset/runner.mjs",
     "mail:status": "npm run build && node --experimental-sqlite --env-file-if-exists=.env dist/src/cli.js mail:status",
-    "mail:resolve": "npm run build && node --experimental-sqlite --env-file-if-exists=.env dist/src/cli.js mail:resolve"
+    "mail:resolve": "npm run build && node --experimental-sqlite --env-file-if-exists=.env dist/src/cli.js mail:resolve",
+    "reporting:demo": "npm run build && node --experimental-sqlite dist/src/reporting-demo.js",
+    "digest:status": "npm run build && node --experimental-sqlite --env-file-if-exists=.env dist/src/cli.js digest:status",
+    "digest:preview": "npm run build && node --experimental-sqlite --env-file-if-exists=.env dist/src/cli.js digest:preview",
+    "digest:generate": "npm run build && node --experimental-sqlite --env-file-if-exists=.env dist/src/cli.js digest:generate"
   },
   "devDependencies": {
     "@types/node": "22.20.5",

@@ -233,6 +233,8 @@ tests/notification/{delivery,idempotency,reconciliation}.test.ts
 
 ## 9. B07 — 每日摘要、补发与历史补充
 
+**v0.8 实际状态：业务代码、schema 6、CLI 和 34 项新增离线回归已完成，总计 272 项通过；真实来源→模型→邮件联调仍待服务商确定，以下全流程完成条件尚未满足。** 详见 [REPORTING.md](REPORTING.md)。
+
 **目标：08:00 的报告日期正确、来源完整、重启不重复。**
 
 建议拆成 3 个小提交：
@@ -244,11 +246,12 @@ tests/notification/{delivery,idempotency,reconciliation}.test.ts
 主要位置：
 
 ```text
-src/domain/policies/{digest-window,digest-readiness,catch-up}.ts
-src/application/{plan-digests,build-digest,create-addendum}.ts
-src/application/templates/digest-email.ts
-src/adapters/storage/sqlite/report-store.ts
-tests/digest/{windows,coverage,catch-up,correction}.test.ts
+src/domain/{models,ports}/reporting.ts
+src/domain/policies/{reporting,report-inputs}.ts
+src/application/{due-digests,build-report,report-renderer}.ts
+src/adapters/storage/{memory-store,sqlite/store}.ts
+src/digest-operations.ts
+tests/reporting.test.ts
 ```
 
 来源不完整就不能声称日报完整；分析未完成的摘录必须明确标注。无昨日报告内容但有历史补充时允许发补充邮件。历史重置消息与真正新消息分开处理。
@@ -367,7 +370,7 @@ evals/               语义质量样例与评估
 
 ## 15. 下一次编码任务建议（更新至 v0.7）
 
-当前按用户选择完成 B05/B06 可配置接口与离线测试；下一业务块为 B07 日报/补报。模型和邮件服务确定后，另行实现真实协议并执行质量/送达验收。以下保留 B04 后的历史任务建议。
+当前按用户选择完成 B05/B06 可配置接口和 B07 日报/补报业务的离线测试；下一业务块为 B08 运维/预算。模型和邮件服务确定后，另行实现真实协议并执行质量/送达验收。以下保留 B04 后的历史任务建议。
 
 ### B04 后的历史建议
 
