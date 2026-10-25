@@ -1,0 +1,75 @@
+# Merge AFTER deploy/rsshub/compose.yaml; relative paths resolve from deploy/rsshub.
+x-watcher-image: &watcher-image
+  image: ${X_WATCHER_IMAGE:-x-watcher:0.10.0}
+  build:
+    context: ../..
+    dockerfile: deploy/watcher/Dockerfile
+    args:
+      NODE_IMAGE: ${NODE_IMAGE:-node:22.23.4-bookworm-slim}
+      BUILD_REVISION: ${BUILD_REVISION:?Set BUILD_REVISION to the reviewed 40-character commit}
+x-locked: &locked
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  tmpfs: ["/tmp:rw,nosuid,nodev,noexec,size=16m,mode=1777"]
+  stop_grace_period: 330s
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "3"
+services:
+  watcher:
+    <<: [*watcher-image, *locked]
+    restart: "on-failure:5"
+    network_mode: "service:rsshub"
+    depends_on:
+      rsshub:
+        condition: service_healthy
+    environment:
+      DATABASE_PATH: ${WATCHER_DATABASE_PATH:-/app/data/watcher.sqlite}
+    secrets:
+      - source: watcher-config
+        target: watcher.env
+    volumes:
+      - watcher-data:/app/data
+  maintenance:
+    <<: [*watcher-image, *locked]
+    profiles: [maintenance]
+    restart: "no"
+    network_mode: none
+    command: ["deploy:preflight"]
+    healthcheck:
+      disable: true
+    environment:
+      DATABASE_PATH: ${WATCHER_DATABASE_PATH:-/app/data/watcher.sqlite}
+    secrets:
+      - source: watcher-config
+        target: watcher.env
+    volumes:
+      - watcher-data:/app/data
+      - watcher-backups:/app/backups
+  backups:
+    <<: [*watcher-image, *locked]
+    profiles: [backups]
+    restart: "on-failure:5"
+    network_mode: none
+    command: ["deploy:backups"]
+    depends_on:
+      watcher:
+        condition: service_started
+    healthcheck:
+      disable: true
+    environment:
+      DATABASE_PATH: ${WATCHER_DATABASE_PATH:-/app/data/watcher.sqlite}
+      BACKUP_DIRECTORY: /app/backups
+      BACKUP_INTERVAL_HOURS: "24"
+    volumes:
+      - watcher-data:/app/data
+      - watcher-backups:/app/backups
+volumes:
+  watcher-data:
+  watcher-backups:
+secrets:
+  watcher-config:
+    file: ../watcher/watcher.env

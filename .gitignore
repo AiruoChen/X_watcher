@@ -12,3 +12,5 @@ coverage/
 exports/
 backups/
 *.ndjson
+deploy/watcher/watcher.env
+deployment-sessions/

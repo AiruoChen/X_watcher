@@ -1,0 +1,143 @@
+[
+  {
+    "id": "AC-01",
+    "required": [
+      "runtime rejects real adapters and memory durability",
+      "source-only preview reuses runtime"
+    ]
+  },
+  {
+    "id": "AC-02",
+    "required": [
+      "duplicate items in one batch and later batches are analyzed only once",
+      "analysis cap is checked before claim"
+    ]
+  },
+  {
+    "id": "AC-03",
+    "required": [
+      "second-page failure leaves no posts"
+    ]
+  },
+  {
+    "id": "AC-04",
+    "required": [
+      "analysis failure leaves ingestion/checkpoint intact",
+      "explicit resume and analysis retry use revisions"
+    ]
+  },
+  {
+    "id": "AC-05",
+    "required": [
+      "separate processes competing for the same mail",
+      "two connections cannot both claim a notification"
+    ]
+  },
+  {
+    "id": "AC-06",
+    "required": [
+      "semantic scope, uncertainty and correction labels",
+      "relative and ambiguous times remain unknown",
+      "a delayed analysis cannot emit an already elapsed reset"
+    ]
+  },
+  {
+    "id": "AC-07",
+    "required": [
+      "calendar deadlines follow leap years",
+      "07:59 waits; 08:00 requires a fresh full recheck"
+    ]
+  },
+  {
+    "id": "AC-08",
+    "required": [
+      "full zero-post day records empty",
+      "late and edited posts become historical addenda"
+    ]
+  },
+  {
+    "id": "AC-09",
+    "required": [
+      "restart after 10 days catches up",
+      "multi-day restart catches up complete windows"
+    ]
+  },
+  {
+    "id": "AC-10",
+    "required": [
+      "SQLite restart deduplicates incident, report and mail",
+      "late and edited posts become historical addenda"
+    ]
+  },
+  {
+    "id": "AC-11",
+    "required": [
+      "mail deadline creates one unknown attempt",
+      "a killed process leaves stage and mail claims"
+    ]
+  },
+  {
+    "id": "AC-12",
+    "required": [
+      "accepted is not delivered",
+      "bounced receipt remains distinct"
+    ]
+  },
+  {
+    "id": "AC-13",
+    "required": [
+      "SQLite two connections cannot claim twice or resolve a stale observation",
+      "CLI status redacts message contents"
+    ]
+  },
+  {
+    "id": "AC-14",
+    "required": [
+      "a slow source does not block delivery",
+      "scheduler persists budget pause"
+    ]
+  },
+  {
+    "id": "AC-15",
+    "required": [
+      "graceful stop stops new claims",
+      "shutdown deadline persists unknown mail"
+    ]
+  },
+  {
+    "id": "AC-16",
+    "required": [
+      "failed migration rolls back DDL",
+      "creation is explicit; corrupt, empty",
+      "backup/restore verifies checksum"
+    ]
+  },
+  {
+    "id": "AC-17",
+    "required": [
+      "model sees only data and schema",
+      "runtime analysis validation rejects untyped malformed"
+    ]
+  },
+  {
+    "id": "AC-18",
+    "required": [
+      "persistent incidents notify once",
+      "preview health remains local"
+    ]
+  },
+  {
+    "id": "AC-19",
+    "required": [
+      "evaluation self-test: labelled outputs",
+      "analysis classifies products/status"
+    ]
+  },
+  {
+    "id": "AC-20",
+    "required": [
+      "pending/needs_attention mail and jobs remain intact",
+      "notification snapshots are immutable"
+    ]
+  }
+]

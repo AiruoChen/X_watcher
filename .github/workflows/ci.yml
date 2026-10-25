@@ -19,7 +19,13 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run check
-      - run: npm test
+      - run: npm run build
+      - name: Offline AC-01 through AC-20
+        if: matrix.os != 'ubuntu-latest' || matrix.node != '22.12.0'
+        run: node scripts/acceptance.mjs --output data/acceptance/offline.json
+      - name: Offline acceptance and measured NFR-09 capacity
+        if: matrix.os == 'ubuntu-latest' && matrix.node == '22.12.0'
+        run: node scripts/acceptance.mjs --output data/acceptance/offline.json --benchmark
       - run: npm run demo
       - run: npm run storage:demo
       - run: npm run runtime:demo
@@ -27,3 +33,29 @@ jobs:
       - run: npm run reporting:demo
       - run: npm run operations:demo
       - run: npm run eval:reset
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: offline-${{ matrix.os }}-node-${{ matrix.node }}
+          path: data/acceptance/offline.json
+          if-no-files-found: error
+  container:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.12.0'
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: node scripts/compose-validate.mjs
+      - name: Isolated image/start/health/hard-restart/stop/persistence exercise
+        run: node scripts/container-smoke.mjs data/acceptance/container.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: linux-container-acceptance
+          path: data/acceptance/container.json
+          if-no-files-found: error

@@ -1,6 +1,6 @@
 {
   "name": "x-watcher",
-  "version": "0.9.0",
+  "version": "0.10.0",
   "private": true,
   "type": "module",
   "description": "Modular X monitoring agent: daily digests and reset alerts",
@@ -8,7 +8,7 @@
     "node": ">=22.12.0"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.json && node scripts/build-stamp.mjs",
     "check": "tsc -p tsconfig.json --noEmit && node scripts/check-boundaries.mjs",
     "test": "npm run build && node --experimental-sqlite --test dist/tests/*.test.js",
     "demo": "npm run build && node dist/src/cli.js demo",
@@ -47,7 +47,17 @@
     "ops:restore": "npm run build && node --experimental-sqlite --env-file-if-exists=.env dist/src/cli.js ops:restore",
     "ops:export": "npm run build && node --experimental-sqlite --env-file-if-exists=.env dist/src/cli.js ops:export",
     "ops:cleanup": "npm run build && node --experimental-sqlite --env-file-if-exists=.env dist/src/cli.js ops:cleanup",
-    "ops:analysis": "npm run build && node --experimental-sqlite --env-file-if-exists=.env dist/src/cli.js ops:analysis"
+    "ops:analysis": "npm run build && node --experimental-sqlite --env-file-if-exists=.env dist/src/cli.js ops:analysis",
+    "deploy:init": "npm run build && node --experimental-sqlite --env-file-if-exists=.env dist/src/cli.js deploy:init",
+    "deploy:run": "npm run build && node --experimental-sqlite --env-file-if-exists=.env dist/src/cli.js deploy:run",
+    "deploy:preflight": "npm run build && node --experimental-sqlite --env-file-if-exists=.env dist/src/cli.js deploy:preflight",
+    "deploy:health": "npm run build && node --experimental-sqlite --env-file-if-exists=.env dist/src/cli.js deploy:health",
+    "release:check": "npm run build && node --experimental-sqlite --env-file-if-exists=.env dist/src/cli.js release:check",
+    "acceptance:offline": "npm run build && node scripts/acceptance.mjs",
+    "acceptance:timing": "npm run build && node --experimental-sqlite dist/src/acceptance-timing.js",
+    "deploy:backups": "npm run build && node --experimental-sqlite --env-file-if-exists=.env dist/src/cli.js deploy:backups",
+    "acceptance:container": "npm run build && node scripts/container-smoke.mjs",
+    "acceptance:capacity": "npm run build && node scripts/acceptance.mjs --benchmark"
   },
   "devDependencies": {
     "@types/node": "22.20.5",

@@ -7,6 +7,11 @@ try {
   if (command === 'demo') await runDemo();
   else if (command === 'config') console.log(JSON.stringify(describeConfig(loadConfig(process.env)), null, 2));
   else if (command === 'run') await runDemo(loadConfig(process.env));
+  else if (command.startsWith('deploy:') || command === 'release:check') {
+    const {deployment}=await import('./deployment.js');
+    try{process.exitCode=await deployment(command,process.argv.slice(3),process.env);}
+    catch(error){if(error instanceof Error && !('code' in error))throw error;throw new Error('Deployment operation failed; inspect local access and configuration. Existing data was retained.');}
+  }
   else if (command.startsWith('ops:')) {
     const { operations } = await import('./operations.js');
     try { operations(loadLocalConfig(process.env),command,process.argv.slice(3)); }
