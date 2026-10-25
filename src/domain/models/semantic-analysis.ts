@@ -5,6 +5,7 @@ export interface CorrectionLink {
 }
 export interface SemanticAnalysis extends VersionedAnalysis {
   readonly schemaVersion: 1;
+  readonly usage?: import('./operations.js').TokenUsage;
   readonly correctionLink?: CorrectionLink | null;
   readonly topics: readonly string[];
   readonly inputCompleteness: 'full' | 'partial';

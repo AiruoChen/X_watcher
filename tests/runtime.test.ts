@@ -218,7 +218,8 @@ test('shutdown deadline persists unknown mail, retains unclaimed work and ignore
   try {
     await flush(); host.stop(); await flush(); await s.waiter.step(1000);
     assert.deepEqual(await run, { exitCode: 2, reason: 'shutdown_timeout' });
-    assert.deepEqual(s.store.outbox().map(n => n.state), ['needs_attention','pending']);
+    assert.deepEqual(s.store.outbox().filter(n => n.notification.kind !== 'service_alert').map(n => n.state), ['needs_attention','pending']);
+    assert.equal(s.store.outbox().filter(n => n.notification.kind === 'service_alert').length, 1);
     held.resolve({ status: 'accepted', providerId: 'late' }); await flush();
     assert.equal(s.store.outbox()[0]!.state, 'needs_attention'); assert.equal(s.store.deliveryAttempts().length, 1);
     assert.equal(s.store.runtime.current(), null);

@@ -262,6 +262,8 @@ tests/reporting.test.ts
 
 ## 10. B08 — 运维、事故、预算与保留
 
+**v0.9 实际状态：本地运维/预算业务、schema 7、CLI 与离线演示完成；新增 33 项回归，总计 305 项通过。** 手动清理须条款确认、停机、有效备份和预览指纹；未启用自动清理。真实服务联调和生产调度包装尚待后续，见 [OPERATIONS.md](OPERATIONS.md)。
+
 **目标：用户能知道 agent 是否在工作，并能在故障后恢复。**
 
 建议拆成 3 个小提交：
@@ -273,10 +275,12 @@ tests/reporting.test.ts
 主要位置：
 
 ```text
-src/cli/{commands,output}.ts
-src/application/{health,incident-notifications,budget,retention,backup}.ts
-src/adapters/observability/{logger,metrics}.ts
-tests/operations/{health,privacy,budget,retention,backup}.test.ts
+src/operations.ts
+src/domain/{models,ports,policies}/operations.ts
+src/application/{health,budget}.ts
+src/adapters/storage/sqlite/{operations,retention,backup}.ts
+src/adapters/{observability/console-events,storage/export}.ts
+tests/operations.test.ts
 docs/OPERATIONS.md
 ```
 
@@ -370,7 +374,7 @@ evals/               语义质量样例与评估
 
 ## 15. 下一次编码任务建议（更新至 v0.7）
 
-当前按用户选择完成 B05/B06 可配置接口和 B07 日报/补报业务的离线测试；下一业务块为 B08 运维/预算。模型和邮件服务确定后，另行实现真实协议并执行质量/送达验收。以下保留 B04 后的历史任务建议。
+当前按用户选择完成 B05/B06 可配置接口和 B07 日报/补报业务的离线测试；B08 本地运维/预算业务也已完成，下一块为 B09 发布包装与生产验收。模型和邮件服务确定后，另行实现真实协议并执行质量/送达验收。以下保留 B04 后的历史任务建议。
 
 ### B04 后的历史建议
 

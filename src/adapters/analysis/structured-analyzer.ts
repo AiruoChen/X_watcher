@@ -1,3 +1,4 @@
+import { UsageFailure } from '../../domain/errors.js';
 import type { ContentAnalyzer, ContentHasher } from '../../domain/ports.js';
 import type { AnalysisOptions, StructuredModel } from '../../domain/ports/analysis.js';
 import type { Post, SemanticAnalysis } from '../../domain/model.js';
@@ -22,9 +23,13 @@ export class StructuredAnalyzer implements ContentAnalyzer {
       instructions: ANALYSIS_INSTRUCTIONS, schema: structuredClone(ANALYSIS_SCHEMA),
       input: { postId: post.id, text: post.text, publishedAt: post.publishedAt, completeness: inputCompleteness(post) === 'full' ? 'full' : 'unknown' } }, signal);
     signal?.throwIfAborted();
+    if (response.usage && (![response.usage.inputTokens,response.usage.outputTokens].every(n => Number.isSafeInteger(n) && n >= 0 && n <= 1e9))) throw new Error('Invalid model usage.');
+    try {
     if (response.status !== 'complete') throw new Error('Analysis output is unavailable or incomplete.');
     const result = parseSemanticAnalysis(post, response.output, { model: this.options.model, analyzerVersion: this.version,
       promptVersion: this.promptVersion, inputHash: this.hasher.hash(JSON.stringify(post)) });
-    validateAnalysis(post, result); return result;
+    validateAnalysis(post, result);
+    return response.usage ? { ...result, usage: { inputTokens: response.usage.inputTokens, outputTokens: response.usage.outputTokens } } : result;
+    } catch(error) { if (response.usage) throw new UsageFailure(response.usage); throw error; }
   }
 }

@@ -7,6 +7,14 @@ try {
   if (command === 'demo') await runDemo();
   else if (command === 'config') console.log(JSON.stringify(describeConfig(loadConfig(process.env)), null, 2));
   else if (command === 'run') await runDemo(loadConfig(process.env));
+  else if (command.startsWith('ops:')) {
+    const { operations } = await import('./operations.js');
+    try { operations(loadLocalConfig(process.env),command,process.argv.slice(3)); }
+    catch(error) {
+      if(error instanceof Error && !('code' in error)) throw error;
+      throw new Error('Operation failed; existing files and database were retained. Check arguments and local access.');
+    }
+  }
   else if (['digest:status', 'digest:preview', 'digest:generate'].includes(command)) {
     const { digestOperations } = await import('./digest-operations.js');
     digestOperations(loadLocalConfig(process.env), command, process.argv.slice(3));
@@ -29,7 +37,7 @@ try {
     process.exitCode = probe ? await probeSource(config, process.env)
       : await previewSource(config, process.env, args.includes('--create'), args.includes('--once'));
   }
-  else throw new Error('Usage: npm run demo | npm start | npm run config:check | npm run watch -- [--create] | npm run source:probe | npm run source:preview -- [--create] [--once] | npm run digest:status -- <day> | npm run digest:preview -- <day> [--partial] | npm run digest:generate -- <day>');
+  else throw new Error('Usage: npm run ops:status | npm run ops:usage | npm run ops:analysis | npm run ops:check-now | npm run ops:stop | npm run ops:backup -- <new-path> | npm run demo | npm start | npm run config:check | npm run watch -- [--create] | npm run source:probe | npm run source:preview -- [--create] [--once] | npm run digest:status -- <day> | npm run digest:preview -- <day> [--partial] | npm run digest:generate -- <day>');
 } catch (error) {
   console.error(error instanceof Error ? error.message : 'Application failed.');
   process.exitCode = 1;

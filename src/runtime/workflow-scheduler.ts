@@ -2,7 +2,7 @@ import type { Clock, EventSink, ExecutionContext, RuntimeJobs, RuntimeState } fr
 import type { RuntimeConfig, ScheduledTask } from '../domain/model.js';
 import { stableId } from '../domain/identifiers.js';
 import { retryDelay } from '../domain/policies/retry.js';
-import { SourceFailure } from '../domain/errors.js';
+import { BudgetExceeded, SourceFailure } from '../domain/errors.js';
 
 /** Persistent stages, with a separate concurrency allowance for each stage. No SDKs or timers. */
 export class WorkflowScheduler {
@@ -13,6 +13,8 @@ export class WorkflowScheduler {
   private cursor = 0;
   private digestEmails = 0;
   private failure: unknown;
+  private stoppedByControl = false;
+  get stopRequested(): boolean { return this.stoppedByControl; }
   private lastPulse: { wall: number; mono: number } | undefined;
   private forceAfter = 0;
   constructor(private readonly config: RuntimeConfig, private readonly clock: Clock,
@@ -38,6 +40,8 @@ export class WorkflowScheduler {
   }
   pulse(context: ExecutionContext): void {
     if (!this.accepting || context.signal.aborted || this.failure) return;
+    try { if (this.jobs.beforePulse?.().stop) { this.stoppedByControl = true; this.stop(); return; } }
+    catch(error) { this.failure = error; this.stop(); return; }
     this.digestEmails = 0;
     const wall = this.clock.now().getTime(), mono = this.clock.monotonicMs();
     if (this.lastPulse && Math.abs((wall - this.lastPulse.wall) - (mono - this.lastPulse.mono)) > 60000)
@@ -61,7 +65,7 @@ export class WorkflowScheduler {
       }
       const target = this.config.targets.find(t => t.id === task.targetId);
       const checkAt = task.stage === 'ingest' && target ? this.jobs.reportCheckAt?.(target) : null;
-      const forceCheck = checkAt && task.failures === 0 && mono >= this.forceAfter
+      const forceCheck = checkAt && task.failures === 0 && task.failureCode !== 'budget_exhausted' && mono >= this.forceAfter
         && (!task.startedAt || Date.parse(task.startedAt) < Date.parse(checkAt));
       if (mono < deadline.at && !forceCheck) continue;
       const claimed = this.state.claim(task.id, task.revision, this.clock.now().toISOString());
@@ -73,7 +77,7 @@ export class WorkflowScheduler {
     if (tasks.length) this.cursor = (start + 1) % tasks.length;
   }
   private async execute(task: ScheduledTask, context: ExecutionContext): Promise<void> {
-    let failed = false; let sourceFailure: SourceFailure | undefined;
+    let failed = false; let sourceFailure: SourceFailure | undefined; let budget: BudgetExceeded | undefined;
     try {
       context.signal.throwIfAborted();
       const target = this.config.targets.find(item => item.id === task.targetId);
@@ -86,7 +90,7 @@ export class WorkflowScheduler {
         if (this.jobs.digest(target, window)) this.digestEmails++;
       }
     } catch (error) {
-      failed = true;
+      if (error instanceof BudgetExceeded) budget = error; else failed = true;
       if (error instanceof SourceFailure) sourceFailure = error;
       try { this.events.record({ type: 'cycle.failed', stage: task.stage }); } catch { /* State is authoritative. */ }
     }
@@ -95,9 +99,10 @@ export class WorkflowScheduler {
     const exhausted = failed && task.stage === 'ingest' && (retry === null || sourceFailure?.retryable === false);
     const delay = failed && task.stage !== 'analysis' ? retry ?? this.config.retry.maxDelayMs : this.interval(task);
     const now = this.clock.now().toISOString();
-    const effectiveDelay = Math.max(delay, sourceFailure?.retryAt ? Date.parse(sourceFailure.retryAt) - Date.parse(now) : 0);
+    const effectiveDelay = Math.max(delay, sourceFailure?.retryAt ? Date.parse(sourceFailure.retryAt) - Date.parse(now) : 0,
+      budget ? Date.parse(budget.retryAt) - Date.parse(now) : 0);
     this.state.finish(task.id, task.revision, new Date(Date.parse(now) + effectiveDelay).toISOString(), failed, exhausted, now,
-      sourceFailure ? { code: sourceFailure.code, retryAt: sourceFailure.retryAt } : undefined);
+      budget ? { code: 'budget_exhausted', retryAt: budget.retryAt } : sourceFailure ? { code: sourceFailure.code, retryAt: sourceFailure.retryAt } : undefined);
     this.deadlines.set(task.id, { revision: task.revision + 1, at: this.clock.monotonicMs() + effectiveDelay });
   }
 }

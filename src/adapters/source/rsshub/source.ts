@@ -8,6 +8,7 @@ import { mapFeed, rsshubAuthorId } from './mapper.js';
 /** Finite snapshots, not exhaustive X queries. Identity is handle-bound, never a claimed numeric X ID. */
 export class RsshubSource implements PostSource {
   readonly capability = 'real';
+  get budgeted(): boolean { return this.client.budgeted; }
   private readonly bindings = new Map<string, ResolvedAuthor>();
   private readonly pending = new Map<string, readonly Post[]>();
   constructor(private readonly client: RsshubClient, private readonly clock: Clock, private readonly config: RuntimeConfig['rsshub']) {}

@@ -1,8 +1,8 @@
-import type { Clock, ExecutionContext, NotificationChannel, WatchStore } from '../domain/ports.js';
+import type { CallGate, Clock, ExecutionContext, NotificationChannel, WatchStore } from '../domain/ports.js';
 import type { DeliveryResult } from '../domain/model.js';
 
 export class DeliverNotifications {
-  constructor(private readonly store: WatchStore, private readonly channel: NotificationChannel, private readonly clock?: Clock) {}
+  constructor(private readonly store: WatchStore, private readonly channel: NotificationChannel, private readonly clock?: Clock, private readonly calls?: CallGate) {}
 
   async execute(context?: ExecutionContext, timeoutMs = 30_000, limit = 100): Promise<readonly { id: string; result: DeliveryResult }[]> {
     if (!Number.isInteger(limit) || limit < 1 || limit > 1000) throw new Error('Invalid delivery batch size.');
@@ -14,12 +14,16 @@ export class DeliverNotifications {
       const entry = this.store.pendingNotifications(1, now)[0];
       if (!entry) break;
       if (!['pending','retry_wait'].includes(entry.state)) continue;
-      const message = this.store.claimDelivery(entry.notification.id, now, this.channel.deliveryBinding?.(entry.notification, now));
-      if (!message) continue;
+      const permit = this.calls?.reserve('mail');
+      let message;
+      try { message = this.store.claimDelivery(entry.notification.id, now, this.channel.deliveryBinding?.(entry.notification, now)); }
+      catch(error) { permit?.cancel(); throw error; }
+      if (!message) { permit?.cancel(); continue; }
       let result: DeliveryResult;
       try {
         const send = (signal?: AbortSignal) => this.channel.sendClaim ? this.channel.sendClaim(message, signal) : this.channel.send(message.notification, signal);
-        result = context ? await context.call(send, timeoutMs) : await send();
+        const call = (signal?: AbortSignal) => permit ? permit.run(() => send(signal)) : send(signal);
+        result = context ? await context.call(call, timeoutMs) : await call();
       }
       catch { result = { status: 'unknown', reason: 'Provider call failed; verify before retrying.' }; }
       this.store.finishDelivery(message.attemptId, result, (this.clock?.now() ?? new Date()).toISOString());

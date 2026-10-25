@@ -64,3 +64,7 @@ RSSHub 的有限时间线只有未验证观察覆盖。B07 可以通过显式 --
 入口为 application/BuildReport、DueDigests、ReportTextRenderer；领域端口为 ReportingStore / ReportRenderer；MemoryStore 与 SqliteStore 共享快照校验规则。Schema 6 新增 source_observations、report_progress、report_boundaries，原报告表与旧快照保留。
 
 reporting.test.ts 覆盖日期/夏令时、07:59/08:00/08:15、完整与缺口/零帖、原文降级、历史编辑/删除/补分析、重启 1/7/10 日、节流、并发 CAS、事务回滚、旧库迁移和离线 CLI。真实时效、送达率和模型语义质量尚未测量，属于后续受控联调与 B09 验收。
+
+## v0.9 保留策略衔接
+
+B08 清理保护报告的帖子/分析、父报告链及待核对通知。超过实际保留期的正文与报告可在显式维护后归档，保留去重键；归档日期不再通过空集合冒充零帖，需要原正文时恢复备份副本。详见 [OPERATIONS.md](OPERATIONS.md)。

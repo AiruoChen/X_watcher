@@ -9,3 +9,6 @@ coverage/
 *.sqlite*
 *.db*
 *.tsbuildinfo
+exports/
+backups/
+*.ndjson

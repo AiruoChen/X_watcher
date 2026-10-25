@@ -38,6 +38,7 @@ export class RuntimeHost {
         heartbeat();
         if (this.scheduler.fatalError) throw new Error('Runtime persistence failed.');
         this.scheduler.pulse(context);
+        if (this.scheduler.stopRequested) this.stop();
         await this.waiter.wait(this.config.runtime.wakeMs, this.wake.signal);
       }
       const deadline = this.clock.monotonicMs() + this.config.runtime.shutdownMs;

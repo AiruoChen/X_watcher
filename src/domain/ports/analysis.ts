@@ -8,7 +8,7 @@ export interface ModelRequest {
 }
 export interface StructuredModel {
   readonly capability: 'simulated' | 'real';
-  complete(request: ModelRequest, signal?: AbortSignal): Promise<{ readonly status: 'complete' | 'refused' | 'incomplete'; readonly output: unknown }>;
+  complete(request: ModelRequest, signal?: AbortSignal): Promise<{ readonly status: 'complete' | 'refused' | 'incomplete'; readonly output: unknown; readonly usage?: import('../model.js').TokenUsage }>;
 }
 export interface AnalysisOptions {
   readonly model: string; readonly version: string; readonly promptVersion: string; readonly allowPartial: boolean;

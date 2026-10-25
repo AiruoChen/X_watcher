@@ -1,4 +1,4 @@
-import type { Clock, ContentAnalyzer, ExecutionContext, NotificationRule, WatchStore } from '../domain/ports.js';
+import type { CallGate, Clock, ContentAnalyzer, ExecutionContext, NotificationRule, WatchStore } from '../domain/ports.js';
 import type { Notification, RuleEvent, RuntimeConfig, VersionedAnalysis, WatchTarget } from '../domain/model.js';
 import { withCorrectionLink } from '../domain/policies/correction.js';
 import type { SemanticAnalysis } from '../domain/model.js';
@@ -9,19 +9,25 @@ import { validateAnalysis } from '../domain/validation.js';
 
 export class ProcessAnalysis {
   constructor(private readonly analyzer: ContentAnalyzer, private readonly store: WatchStore,
-    private readonly rules: readonly NotificationRule[], private readonly clock: Clock, private readonly config: RuntimeConfig) {}
+    private readonly rules: readonly NotificationRule[], private readonly clock: Clock, private readonly config: RuntimeConfig, private readonly calls?: CallGate) {}
   async execute(target: WatchTarget, context?: ExecutionContext, limit = 100): Promise<void> {
     let failed = false;
     for (const candidate of this.store.pendingAnalysisJobs(target.id, this.clock.now().toISOString(), limit)) {
       if (context && (context.signal.aborted || !context.canClaim())) break;
-      const job = this.store.claimAnalysis(candidate.id, this.clock.now().toISOString());
-      if (!job) continue;
+      const input = this.store.postVersion(candidate.postKey)!;
+      const eligible = (input.completeness === 'full' || this.analyzer.supportsPartial)
+        && (this.analyzer.version === undefined || (candidate.analyzerVersion === this.analyzer.version && candidate.promptVersion === this.analyzer.promptVersion));
+      const permit = eligible ? this.calls?.reserve('analysis') : undefined;
+      let job: typeof candidate | null;
+      try { job = this.store.claimAnalysis(candidate.id, this.clock.now().toISOString()); } catch(error) { permit?.cancel(); throw error; }
+      if (!job) { permit?.cancel(); continue; }
       try {
         const post = this.store.postVersion(job.postKey)!;
         if ((post.completeness !== 'full' && !this.analyzer.supportsPartial)
           || (this.analyzer.version !== undefined && (job.analyzerVersion !== this.analyzer.version || job.promptVersion !== this.analyzer.promptVersion))) { this.store.failAnalysis(job.id, job.revision, null); continue; }
-        let analysis = context ? await context.call(signal => this.analyzer.analyze(post, signal), this.config.services.analysis.timeoutMs)
-          : await this.analyzer.analyze(post);
+        const analyze = (signal?: AbortSignal) => permit ? permit.run(() => this.analyzer.analyze(post, signal),
+          result => (result as Partial<SemanticAnalysis>).usage) : this.analyzer.analyze(post, signal);
+        let analysis = context ? await context.call(analyze, this.config.services.analysis.timeoutMs) : await analyze();
         context?.signal.throwIfAborted();
         validateAnalysis(post, analysis);
         const semantic = analysis as Partial<SemanticAnalysis>;

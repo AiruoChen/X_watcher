@@ -1,6 +1,6 @@
-import type { Clock } from '../../../domain/ports.js';
+import type { CallGate, Clock } from '../../../domain/ports.js';
 import type { RuntimeConfig } from '../../../domain/model.js';
-import { SourceFailure } from '../../../domain/errors.js';
+import { BudgetExceeded, SourceFailure } from '../../../domain/errors.js';
 import { DeadlineContext } from '../../execution.js';
 
 export type RsshubTransport = (url: URL, init: RequestInit) => Promise<Response>;
@@ -9,7 +9,8 @@ export class RsshubClient {
   private calls = 0;
   private gateMono = 0;
   constructor(private readonly config: RuntimeConfig['rsshub'], private readonly clock: Clock,
-    private readonly transport: RsshubTransport = (url, init) => fetch(url, init), private readonly maxBytes = 4_000_000) {}
+    private readonly transport: RsshubTransport = (url, init) => fetch(url, init), private readonly maxBytes = 4_000_000, private readonly callGate?: CallGate) {}
+  get budgeted(): boolean { return this.callGate !== undefined; }
   get requestCount(): number { return this.calls; }
   async timeline(handle: string, signal?: AbortSignal): Promise<unknown> {
     if (!/^[a-zA-Z0-9_]{1,15}$/.test(handle)) throw new SourceFailure('identity_mismatch', false);
@@ -24,9 +25,10 @@ export class RsshubClient {
     const parent = signal ?? new AbortController().signal;
     try {
       return await new DeadlineContext(parent).call(async deadline => {
-        this.calls++;
-        const response = await this.transport(url, { method: 'GET', redirect: 'error', signal: deadline,
-          headers: { accept: 'application/feed+json, application/json' } });
+        const permit = this.callGate?.reserve('source');
+        const request = async () => { this.calls++; return this.transport(url, { method: 'GET', redirect: 'error', signal: deadline,
+          headers: { accept: 'application/feed+json, application/json' } }); };
+        const response = permit ? await permit.run(request) : await request();
         const rawRetry = response.headers.get('retry-after');
         const server = Date.parse(response.headers.get('date') ?? '');
         const delay = rawRetry && /^\d+$/.test(rawRetry) ? Number(rawRetry) * 1000
@@ -65,7 +67,7 @@ export class RsshubClient {
         catch { throw new SourceFailure('protocol', false); }
       }, this.config.requestTimeoutMs);
     } catch (error) {
-      if (error instanceof SourceFailure) throw error;
+      if (error instanceof SourceFailure || error instanceof BudgetExceeded) throw error;
       if (parent.aborted) throw new SourceFailure('cancelled', true);
       if (error instanceof Error && error.message.startsWith('Operation deadline')) throw new SourceFailure('timeout', true);
       throw new SourceFailure('network', true);

@@ -1,10 +1,11 @@
-import type { Clock } from '../../../domain/ports.js';
-import { SourceFailure } from '../../../domain/errors.js';
+import type { CallGate, Clock } from '../../../domain/ports.js';
+import { BudgetExceeded, SourceFailure } from '../../../domain/errors.js';
 import { DeadlineContext } from '../../execution.js';
 
 export type XTransport = (url: URL, init: RequestInit) => Promise<Response>;
 export interface XClientOptions {
   readonly token: string;
+  readonly calls?: CallGate;
   readonly clock: Clock;
   readonly timeoutMs: number;
   readonly transport?: XTransport;
@@ -19,9 +20,12 @@ export class XClient {
   private readonly maxBytes: number;
   private readonly gates = new Map<string, { wall: number; mono: number }>();
   private calls = 0;
+  private readonly callGate: CallGate | undefined;
+  get budgeted(): boolean { return this.callGate !== undefined; }
   constructor(options: XClientOptions) {
     if (!options.token || /[\s\r\n\0]/.test(options.token)) throw new SourceFailure('authentication', false);
     if (!Number.isSafeInteger(options.timeoutMs) || options.timeoutMs < 1) throw new SourceFailure('protocol', false);
+    this.callGate = options.calls;
     this.#token = options.token; this.clock = options.clock; this.timeoutMs = options.timeoutMs;
     this.transport = options.transport ?? ((url, init) => fetch(url, init));
     this.maxBytes = options.maxResponseBytes ?? 4_000_000;
@@ -51,9 +55,10 @@ export class XClient {
     const parent = signal ?? new AbortController().signal;
     try {
       return await new DeadlineContext(parent).call(async deadline => {
-        this.calls++;
-        const response = await this.transport(url, { method: 'GET', redirect: 'error', signal: deadline,
-          headers: { authorization: `Bearer ${this.#token}`, accept: 'application/json' } });
+        const permit = this.callGate?.reserve('source');
+        const request = async () => { this.calls++; return this.transport(url, { method: 'GET', redirect: 'error', signal: deadline,
+          headers: { authorization: `Bearer ${this.#token}`, accept: 'application/json' } }); };
+        const response = permit ? await permit.run(request) : await request();
         const retryAt = this.retryAt(response.headers);
         if ((response.status === 429 || response.headers.get('x-rate-limit-remaining') === '0') && retryAt) {
           const wall = Date.parse(retryAt); this.gates.set(gateKey, { wall, mono: this.clock.monotonicMs() + Math.max(0, wall - this.clock.now().getTime()) });
@@ -88,7 +93,7 @@ export class XClient {
         catch { throw new SourceFailure('protocol', false); }
       }, this.timeoutMs);
     } catch (error) {
-      if (error instanceof SourceFailure) throw error;
+      if (error instanceof SourceFailure || error instanceof BudgetExceeded) throw error;
       if (parent.aborted) throw new SourceFailure('cancelled', true);
       if (error instanceof Error && error.message.startsWith('Operation deadline')) throw new SourceFailure('timeout', true);
       throw new SourceFailure('network', true);

@@ -100,6 +100,21 @@ export function parseConfig(input: unknown): RuntimeConfig {
     if (recipient.toLowerCase().endsWith('.invalid')) throw new ConfigError('NOTIFICATION_TO');
   }
   if (!['true','false'].includes(text('ANALYSIS_ALLOW_PARTIAL'))) throw new ConfigError('ANALYSIS_ALLOW_PARTIAL');
+  const callLimit = (key: ConfigField): number | null => optional(key) === null ? null : number(key, 1, 1e9);
+  const unit = (key: ConfigField): number | null => {
+    const raw = optional(key); if (raw === null) return null;
+    if (!/^(?:0|[1-9]\d*)(?:\.\d{1,6})?$/.test(raw)) throw new ConfigError(key);
+    const [whole,fraction=''] = raw.split('.');
+    const micros = BigInt(whole!) * 1000000n + BigInt(fraction.padEnd(6,'0'));
+    if (micros > 1000000000000000n) throw new ConfigError(key);
+    return Number(micros);
+  };
+  const unitMicros = { source: unit('SOURCE_MAX_COST_PER_CALL'), analysis: unit('ANALYSIS_MAX_COST_PER_CALL'), mail: unit('MAIL_MAX_COST_PER_CALL') };
+  const currency = optional('BUDGET_CURRENCY'), priceReference = optional('BUDGET_PRICE_REFERENCE');
+  if (Object.values(unitMicros).some(v => v !== null) && (!currency || !/^[A-Z]{3}$/.test(currency) || !priceReference)) throw new ConfigError('BUDGET_PRICE_REFERENCE/CURRENCY');
+  if (priceReference && priceReference.length > 500) throw new ConfigError('BUDGET_PRICE_REFERENCE');
+  for (const key of ['RETENTION_TERMS_REVIEWED','AUTO_CLEANUP'] as const) if (!['true','false'].includes(text(key))) throw new ConfigError(key);
+  if (text('AUTO_CLEANUP') === 'true') throw new ConfigError('AUTO_CLEANUP: only stopped-runtime manual cleanup is supported');
   const config: Omit<RuntimeConfig, 'revision'> = { schemaVersion: 1, mode,
     targets: handles.map(handle => services.source.provider === 'rsshub'
       ? { id: `rsshub-x:${handle.toLowerCase()}`, provider: 'rsshub-x', handle }
@@ -110,6 +125,9 @@ export function parseConfig(input: unknown): RuntimeConfig {
     mailPolicy: { account: optional('MAIL_ACCOUNT'), idempotencyTtlMs: number('MAIL_IDEMPOTENCY_TTL_SECONDS', 0, 604800) * 1000,
       maxAttempts: number('MAIL_MAX_ATTEMPTS', 1, 100) },
     budget: { maxCallsPerDay: optional('MAX_CALLS_PER_DAY') === null ? null : number('MAX_CALLS_PER_DAY', 1, 1e9),
-      maxCostPerDay: optional('MAX_COST_PER_DAY') === null ? null : number('MAX_COST_PER_DAY', 0.01, 1e9, false) } };
+      maxCostPerDay: optional('MAX_COST_PER_DAY') === null ? null : number('MAX_COST_PER_DAY', 0.01, 1e9, false), maxCostMicros: unit('MAX_COST_PER_DAY'),
+      serviceCalls: { source: callLimit('MAX_SOURCE_CALLS_PER_DAY'), analysis: callLimit('MAX_ANALYSIS_CALLS_PER_DAY'), mail: callLimit('MAX_MAIL_CALLS_PER_DAY') },
+      unitMicros, currency, priceReference },
+    operations: { retentionTermsReviewed: text('RETENTION_TERMS_REVIEWED') === 'true', autoCleanup: false } };
   return { ...config, revision: createHash('sha256').update(JSON.stringify(config)).digest('hex') };
 }

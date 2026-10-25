@@ -2,7 +2,9 @@
 
 一个可扩展的 X 推文监测 agent 框架。首个场景是关注 `@thsottiaux`：每半小时读取新推文，发现重置相关信息后提醒，并在北京时间每天 **08:00** 整理前一天的内容与其中提到的 ChatGPT 更新。
 
-> **当前 v0.8 已完成 B07 日报/补报业务代码与离线验证。** 新增 08:00 同任务补查、08:15 等待/原文降级、故障与恢复通知、最近 7 日补报及历史更正快照；SQLite schema 6 保留旧数据并自动备份迁移。272 项离线测试通过，新增 `digest:status`、`digest:preview`、`digest:generate` 和 `reporting:demo`。详见 [日报模块](docs/REPORTING.md)。
+> **当前 v0.9 已完成 B08 运维/预算业务代码与离线验证。** 新增状态/用量/通知查询、同任务立即检查、优雅停止与显式恢复、故障/恢复去重、逐请求预算、备份恢复、历史导出和带依赖保护的手动清理；SQLite schema 7 保留旧数据并验证备份迁移。305 项离线测试通过，运行 `npm run operations:demo` 查看演示；命令、配置与操作影响见 [运维手册](docs/OPERATIONS.md)。
+
+> B07 已提供 08:00 日报补查、08:15 等待/原文降级、最近 7 日补报及不可变历史更正，详见 [日报模块](docs/REPORTING.md)。
 
 > B05/B06 保留可配置分析、邮件与核对接口。按你的选择，暂不指定服务商；真实模型、邮件和 RSSHub 实例仍待联调，不发送真实邮件，`live` 继续拒绝启动。RSSHub 只支持明确标注可能遗漏的部分预览。
 
@@ -14,7 +16,7 @@
 
 目标产品的完整规则见 [需求文档](docs/REQUIREMENTS.md)，后续实现见 [分块开发计划](docs/DEVELOPMENT_PLAN.md)。两份文档描述未来生产能力；当前提供模拟演示及显式真实只读入口，尚未形成分析/发信闭环。
 
-开发主线：**领域合同 → SQLite → 可恢复运行 → 真实 X → 分析/重置 → 邮件/核对 → 日报/补报 → 运维/预算 → 部署验收**。B05/B06 通用接口和 B07 日报业务已通过离线验证；后续为 B08 运维/预算，以及服务商接入和受控真实验收。RSSHub 的真实核验需先启动自托管实例并配置登录 Cookie；官方 API 方案的 Token 联调仍可独立进行。
+开发主线：**领域合同 → SQLite → 可恢复运行 → 真实 X → 分析/重置 → 邮件/核对 → 日报/补报 → 运维/预算 → 部署验收**。B05/B06 通用接口和 B07 日报业务已通过离线验证；B08 运维/预算也已通过离线验证；后续为 B09 发布包装，以及服务商接入和受控真实验收。RSSHub 的真实核验需先启动自托管实例并配置登录 Cookie；官方 API 方案的 Token 联调仍可独立进行。
 
 ## 快速开始
 
@@ -29,6 +31,7 @@ npm run config:check
 npm run storage:demo
 npm run runtime:demo
 npm run reporting:demo
+npm run operations:demo
 ```
 
 演示使用固定时钟、虚构历史/新推文、内存存储及邮件预览，运行两次 tick 验证同一进程中不会重复通知。没有网络请求，不需要 API 密钥。
@@ -36,6 +39,12 @@ npm run reporting:demo
 复制 `.env.example` 为 `.env`，可调整监测账号、轮询间隔、时区、摘要时间、收件人。然后运行 `npm start` 读取配置并执行一次模拟演示；它会退出，**不是常驻服务**。在当前演示中，日期固定为 2026-01-02，北京时间 08:00，因此其他时区/摘要时间可能尚未到点。真实邮箱仅保存在忽略的 `.env` 中。
 
 运行常驻模拟宿主：在 `.env` 中设置 `APP_MODE=demo`、`STORAGE_KIND=sqlite`，首次执行 `npm run watch -- --create`；后续执行 `npm run watch`。它使用系统时钟、真实 SQLite 和空模拟来源，只生成空报告状态，不读取 X、不发邮件；按 Ctrl+C 优雅停止。新库必须显式创建，坏库不会被覆盖。`runtime:demo` 则使用虚构帖子和虚拟时钟，自动验证启动、停止、重新打开及摘要预览去重后退出。详见 [运行模块](docs/RUNTIME.md)。
+
+## 本地运维与预算
+
+在使用现有 SQLite 库时，可运行 `npm run ops:status`、`npm run ops:usage`、`npm run ops:notifications`；`ops:check-now` / `ops:stop` 通过持久命令交给原宿主执行。预算在外部调用前核验并跨重启保留；来源按每次 HTTP、分析按调用、邮件按尝试计数。
+
+`ops:backup` / `ops:restore` 仅发布到新文件，`ops:export` 显式导出历史；`ops:cleanup` 默认只预览，须核对来源条款、停止宿主并先备份才执行。命令与失败恢复见 [运维手册](docs/OPERATIONS.md)。
 
 ## 自托管 RSSHub（当前选择）
 
