@@ -7,16 +7,16 @@ import type {
 export interface Clock { now(): Date; monotonicMs(): number }
 export interface PostSource {
   readonly capability: 'simulated' | 'real';
-  fetch(target: WatchTarget, cursor: string | null, query?: SourceQuery): Promise<PostBatch>;
+  fetch(target: WatchTarget, cursor: string | null, query?: SourceQuery, signal?: AbortSignal): Promise<PostBatch>;
 }
 export interface ContentAnalyzer {
   readonly capability: 'simulated' | 'real';
-  analyze(post: Post): Promise<Analysis>;
+  analyze(post: Post, signal?: AbortSignal): Promise<Analysis>;
 }
 export interface NotificationChannel {
   readonly capability: 'simulated' | 'real';
   /** Use notification.id as provider idempotency key, when supported. */
-  send(notification: Notification): Promise<DeliveryResult>;
+  send(notification: Notification, signal?: AbortSignal): Promise<DeliveryResult>;
 }
 export interface NotificationRule {
   readonly id: string;

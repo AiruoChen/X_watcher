@@ -5,6 +5,8 @@ export interface RuntimeConfig {
   readonly storage: { readonly kind: 'memory' | 'sqlite'; readonly path: string };
   readonly policy: BusinessPolicy;
   readonly retry: RetryPolicy;
+  readonly runtime: { readonly wakeMs: number; readonly leaseMs: number; readonly shutdownMs: number;
+    readonly maxConcurrent: number; readonly batchSize: number };
   readonly services: {
     readonly source: ServiceConfig;
     readonly analysis: ServiceConfig & { readonly model: string | null; readonly version: string; readonly promptVersion: string };

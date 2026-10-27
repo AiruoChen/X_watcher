@@ -47,6 +47,10 @@ export function parseConfig(input: unknown): RuntimeConfig {
   const retry = { maxAttempts: number('RETRY_MAX_ATTEMPTS', 1, 100), baseDelayMs: number('RETRY_BASE_SECONDS', 1, 86400) * 1000,
     maxDelayMs: number('RETRY_MAX_SECONDS', 1, 86400) * 1000, jitterRatio: number('RETRY_JITTER', 0, 1, false) };
   if (retry.maxDelayMs < retry.baseDelayMs) throw new ConfigError('RETRY_MAX_SECONDS');
+  const runtime = { wakeMs: number('RUNTIME_WAKE_MS', 10, 10000), leaseMs: number('RUNTIME_LEASE_SECONDS', 3, 3600) * 1000,
+    shutdownMs: number('RUNTIME_SHUTDOWN_SECONDS', 1, 300) * 1000,
+    maxConcurrent: number('RUNTIME_MAX_CONCURRENT', 4, 100), batchSize: number('RUNTIME_BATCH_SIZE', 1, 1000) };
+  if (runtime.wakeMs * 3 > runtime.leaseMs) throw new ConfigError('RUNTIME_LEASE_SECONDS');
   const policy = { initialBackfillDays: number('INITIAL_BACKFILL_DAYS', 1, 365), resetMaxAgeMs: number('RESET_MAX_AGE_HOURS', 1, 8760) * 3_600_000,
     digestCatchUpDays: number('DIGEST_CATCH_UP_DAYS', 1, 365), maxCatchUpEmailsPerCycle: number('MAX_CATCH_UP_EMAILS', 1, 100),
     digestGraceMinutes: number('DIGEST_GRACE_MINUTES', 0, 60), failureThreshold: number('FAILURE_THRESHOLD', 1, 100),
@@ -76,7 +80,7 @@ export function parseConfig(input: unknown): RuntimeConfig {
   const config: Omit<RuntimeConfig, 'revision'> = { schemaVersion: 1, mode,
     targets: handles.map(handle => ({ id: `x:${handle.toLowerCase()}`, provider: 'x', handle })),
     pollIntervalMs: number('POLL_INTERVAL_MINUTES', 1, 1440) * 60_000, timeZone: zone, dailyDigestAt: at,
-    recipient, storage: { kind, path: text('DATABASE_PATH') }, retry, policy, services,
+    recipient, storage: { kind, path: text('DATABASE_PATH') }, retry, runtime, policy, services,
     budget: { maxCallsPerDay: optional('MAX_CALLS_PER_DAY') === null ? null : number('MAX_CALLS_PER_DAY', 1, 1e9),
       maxCostPerDay: optional('MAX_COST_PER_DAY') === null ? null : number('MAX_COST_PER_DAY', 0.01, 1e9, false) } };
   return { ...config, revision: createHash('sha256').update(JSON.stringify(config)).digest('hex') };

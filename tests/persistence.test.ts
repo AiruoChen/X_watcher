@@ -53,9 +53,21 @@ test('schema v1 migrates losslessly with a verified pre-upgrade backup', () => {
     const db = new DatabaseSync(s.path); db.exec('PRAGMA foreign_keys=ON'); migrate(db, true, MIGRATIONS.slice(0, 1));
     db.prepare('INSERT INTO targets VALUES(?,?,?,?)').run(target.id, target.provider, target.authorId, JSON.stringify(target)); db.close();
     const upgraded = s.open(); assert.deepEqual(upgraded.target(target.id), target);
-    const backups = readdirSync(s.root).filter(p => p.includes('.pre-v2.')); assert.equal(backups.length, 1);
+    const backups = readdirSync(s.root).filter(p => p.includes(`.pre-v${MIGRATIONS.length}.`)); assert.equal(backups.length, 1);
     const backup = new DatabaseSync(join(s.root, backups[0]!), { readOnly: true });
     assert.equal(backup.prepare('PRAGMA user_version').get()!['user_version'], 1); assert.equal(backup.prepare('SELECT count(*) n FROM targets').get()!['n'], 1); backup.close();
+  } finally { s.close(); }
+});
+
+test('schema v2 upgrades without changing pending mail or ownership and creates runtime tasks', () => {
+  const s = setup();
+  try {
+    const db = new DatabaseSync(s.path); migrate(db, true, MIGRATIONS.slice(0, 2));
+    db.prepare('INSERT INTO notifications(id,state,payload) VALUES(?,?,?)').run(message.id, 'pending', JSON.stringify(message));
+    db.close(); const upgraded = s.open(); assert.equal(upgraded.outbox()[0]!.state, 'pending');
+    assert.equal(upgraded.runtime.current(), null); assert.deepEqual(upgraded.schedules.tasks(), []);
+    const raw = new DatabaseSync(s.path); assert.equal(raw.prepare('PRAGMA user_version').get()!['user_version'], 3); raw.close();
+    assert.equal(readdirSync(s.root).filter(p => p.includes('.pre-v3.')).length, 1);
   } finally { s.close(); }
 });
 
@@ -63,8 +75,8 @@ test('failed migration rolls back DDL, history and data together', () => {
   const db = new DatabaseSync(':memory:');
   try {
     migrate(db, true); db.prepare('INSERT INTO targets VALUES(?,?,?,?)').run(target.id, target.provider, target.authorId, JSON.stringify(target));
-    assert.throws(() => migrate(db, false, [...MIGRATIONS, { version: 3, sql: 'CREATE TABLE should_rollback(id); INSERT INTO missing_table VALUES(1);' }]));
-    assert.equal(db.prepare('PRAGMA user_version').get()!['user_version'], 2);
+    assert.throws(() => migrate(db, false, [...MIGRATIONS, { version: MIGRATIONS.length + 1, sql: 'CREATE TABLE should_rollback(id); INSERT INTO missing_table VALUES(1);' }]));
+    assert.equal(db.prepare('PRAGMA user_version').get()!['user_version'], MIGRATIONS.length);
     assert.equal(db.prepare("SELECT count(*) n FROM sqlite_master WHERE name='should_rollback'").get()!['n'], 0);
     assert.equal(db.prepare('SELECT count(*) n FROM targets').get()!['n'], 1);
   } finally { db.close(); }

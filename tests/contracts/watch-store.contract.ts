@@ -38,6 +38,14 @@ function completion(store: WatchStore, job: AnalysisJob): AnalysisCommit {
 }
 /** Reuse this suite unchanged for the future SQLite implementation. */
 export function watchStoreContract(name: string, create: () => WatchStore): void {
+  test(`${name}: reset and correction preempt digest backlog before applying the page limit`, () => {
+    const store = create();
+    const message = { targetId: target.id, recipient: config.recipient, subject: 'Synthetic', text: 'Synthetic', createdAt: '2026-01-02T00:00:00Z' };
+    store.enqueue({ ...message, id: 'digest-old', kind: 'digest' });
+    store.enqueue({ ...message, id: 'correction', kind: 'correction' });
+    store.enqueue({ ...message, id: 'reset', kind: 'reset' });
+    assert.deepEqual(store.pendingNotifications(2).map(entry => entry.notification.id), ['correction','reset']);
+  });
   test(`${name}: ingestion persists raw versions, coverage and jobs before analysis`, async () => {
     const { store } = await seeded(create);
     assert.equal(store.checkpoint(target.id).revision, 1);

@@ -1,6 +1,6 @@
-# SQLite 持久化（B02 / v0.3）
+# SQLite 持久化（B02–B03 / v0.4）
 
-B02 提供真实本地持久化；X、模型与邮件仍是模拟服务。B03 的常驻宿主、独立队列唤醒、停止/重启编排尚未接入。本模块不会自动启用 live。
+B02 提供真实本地持久化，B03 已组装常驻宿主、独立阶段调度和停止/重启编排；X、模型与邮件仍模拟，不会自动启用 live。入口与边界见 [RUNTIME.md](RUNTIME.md)。
 
 ## 使用
 
@@ -33,12 +33,13 @@ restoreBackup('data/backup-001.sqlite', 'data/restored.sqlite', manifest.sha256)
 
 `create:true` 只允许创建**尚不存在**的新文件；现有零字节、损坏文件、未知 schema、篡改迁移历史或缺失必需对象都会拒绝打开，不自动重建空库。新建失败可能保留未完成文件，应保留诊断并显式处理，不能靠循环 create 掩盖问题。
 
-默认 `npm start` 仍是内存模拟演示；生产配置与常驻宿主的 SQLite 组装在 B03 实现。不能因为配置 STORAGE_KIND=sqlite 就认为已有生产后台运行。
+默认 `npm start` 保留一次性模拟演示；`npm run watch` 才是 SQLite 常驻前台入口。不能因为配置 STORAGE_KIND=sqlite 就认为已有生产后台运行。
 
 ## 表、版本与迁移
 
 - Schema 1 建立 targets、checkpoints、coverage_ranges、post_versions、analysis_jobs、analysis_results、rule_events、digest_reports、notifications、delivery_attempts、runtime_ownership、audit_events，以及兼容的 legacy_posts。
 - Schema 2 记录作业/尝试领取者，并增加按目标/日期、最新版本、作业状态、结果版本、通知状态和尝试的索引，数据保持不变。
+- Schema 3 增加 runtime_tasks 及状态/期限索引，保存分阶段下次执行、失败次数、领取状态与 revision；通知增加 reset/correction 优先表达式索引，已有业务记录不变。
 - `schema_migrations` 记录有序版本与 SQL 校验和，`PRAGMA user_version` 与历史必须一致；未知未来版本拒绝写入。
 - 迁移在单个同步事务中执行，失败同时回滚 DDL、历史和业务数据。对已有旧库升级前先生成经过完整性校验的 `.pre-vN.<随机值>.sqlite` 备份。
 - 启动检查 SQLite quick_check、外键、迁移历史、必需表和当前版本索引。不会用 IF NOT EXISTS 给损坏的现有库补空表掩盖问题。
@@ -73,8 +74,8 @@ store.runtime.release(renewed.revision);
 - 已有 owner 时，其他连接不能领取/提交业务写入；失去执行权的旧连接也不能续租或提交结果。即使没有宿主，连接也不能完成其他 worker 领取的作业/发送尝试。
 - 超时本身不证明进程死亡。只允许对**同主机、已过期、明确进程已死**的 owner 进行替换；未知存活状态或其他主机一律拒绝。
 - OS 存活探测在事务外执行，事务内重验之前观察到的执行权 revision，防止探测期间执行权已变化。
-- close 不会释放运行执行权。release 在存在 processing/sending 时拒绝执行。
-- 取得新执行权后，显式 `recoverAbandonedWork(revision)` 将其他领取者遗留的 processing 分析与 sending 通知隔离，记录审计；当前领取者仍在执行的工作不被恢复流程改写；不自动释放/重发。人工重排与供应商核对属于 B03/B06。
+- close 不会释放运行执行权。release 在存在 processing/sending 或 running 阶段标记时拒绝执行。当前连接租约有效期使用单调时间，墙钟期限仍持久化用于死进程替换；两者均重验 owner/revision。
+- 取得新执行权后，显式 `recoverAbandonedWork(revision)` 将其他领取者遗留的 processing 分析与 sending 通知隔离，记录审计；当前领取者仍在执行的工作不被恢复流程改写；不自动释放/重发。B03 宿主已调用该接口，再恢复阶段标记；人工重排与供应商核对由后续阶段实现。
 - 保留的 `recoverInFlight()` 是显式兼容操作，只隔离 sending；B03 宿主应使用带执行权的 recoverAbandonedWork。
 
 本实现保守处理 PID 复用：若 PID 活着，就不当成已死亡进程。恢复到另一主机时保留原执行权和未决记录，不自动消除旧主机状态；跨主机人工处置入口留给后续阶段。

@@ -14,3 +14,18 @@ export interface AuditRecord {
   readonly reason: string;
   readonly createdAt: string;
 }
+
+export type RuntimeStage = 'ingest' | 'analysis' | 'delivery' | 'digest';
+/** dueAt is nextPollAt for ingestion and nextRetryAt when failures > 0. */
+export interface ScheduledTask {
+  readonly id: string;
+  readonly stage: RuntimeStage;
+  readonly targetId: string | null;
+  readonly configRevision: string;
+  readonly revision: number;
+  readonly state: 'idle' | 'running' | 'needs_attention';
+  readonly dueAt: string;
+  readonly failures: number;
+  readonly startedAt: string | null;
+  readonly finishedAt: string | null;
+}

@@ -12,6 +12,7 @@ import { openDatabase } from './connection.js';
 import { transaction } from './transaction.js';
 import { backupDatabase, type BackupManifest } from './backup.js';
 import { RuntimeClaims, type ClaimsOptions } from './claims.js';
+import { SqliteRuntimeState } from './runtime-state.js';
 
 const pack = (value: unknown): string => JSON.stringify(structuredClone(value));
 /** Indexed row storage. No process-wide cache is authoritative. */
@@ -19,9 +20,10 @@ export class SqliteStore implements WatchStore {
   readonly durability = 'persistent';
   private readonly db;
   readonly runtime: RuntimeClaims;
+  readonly schedules: SqliteRuntimeState;
   constructor(path: string, options: { create?: boolean; claims?: ClaimsOptions } = {}) {
     this.db = openDatabase(path, options.create ?? false);
-    try { this.runtime = new RuntimeClaims(this.db, options.claims); }
+    try { this.runtime = new RuntimeClaims(this.db, options.claims); this.schedules = new SqliteRuntimeState(this.db, this.runtime); }
     catch (error) { this.db.close(); throw error; }
   }
   close(): void { this.db.close(); }
@@ -221,7 +223,10 @@ export class SqliteStore implements WatchStore {
   }
   outbox(): readonly OutboxEntry[] { return this.entries('SELECT * FROM notifications ORDER BY seq'); }
   private limit(limit: number): void { if (!Number.isInteger(limit) || limit < 1 || limit > 1000) throw new Error('Invalid page limit.'); }
-  pendingNotifications(limit: number): readonly OutboxEntry[] { this.limit(limit); return this.entries("SELECT * FROM notifications WHERE state='pending' ORDER BY seq LIMIT ?", limit); }
+  pendingNotifications(limit: number): readonly OutboxEntry[] {
+    this.limit(limit);
+    return this.entries("SELECT * FROM notifications WHERE state='pending' ORDER BY (CASE WHEN json_extract(payload,'$.kind') IN ('reset','correction') THEN 0 ELSE 1 END),seq LIMIT ?", limit);
+  }
   claimDelivery(id: string, now: string): DeliveryClaim | null {
     if (!isInstant(now)) throw new Error('Invalid delivery time.');
     return this.write(() => {

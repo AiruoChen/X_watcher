@@ -87,7 +87,8 @@ export class MemoryStore implements WatchStore {
   }
   pendingNotifications(limit: number): readonly OutboxEntry[] {
     if (!Number.isInteger(limit) || limit < 1 || limit > 1000) throw new Error('Invalid page limit.');
-    return this.outbox().filter(entry => entry.state === 'pending').slice(0, limit);
+    const priority = (entry: OutboxEntry): number => ['reset', 'correction'].includes(entry.notification.kind) ? 0 : 1;
+    return this.outbox().filter(entry => entry.state === 'pending').sort((a, b) => priority(a) - priority(b)).slice(0, limit);
   }
   pendingAnalysisJobs(targetId: string, now: string, limit: number): readonly AnalysisJob[] {
     if (!isInstant(now) || !Number.isInteger(limit) || limit < 1 || limit > 1000) throw new Error('Invalid queue query.');

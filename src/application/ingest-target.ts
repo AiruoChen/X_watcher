@@ -1,4 +1,4 @@
-import type { Clock, ContentHasher, PostSource, WatchStore } from '../domain/ports.js';
+import type { Clock, ContentHasher, ExecutionContext, PostSource, WatchStore } from '../domain/ports.js';
 import type { AnalysisJob, PostVersion, RuntimeConfig, WatchTarget } from '../domain/model.js';
 import { stableId } from '../domain/identifiers.js';
 import { IncompleteBatchError } from '../domain/errors.js';
@@ -8,7 +8,8 @@ import { digestWindowForDay, dueDigestWindow, shiftDay } from '../domain/time.js
 export class IngestTarget {
   constructor(private readonly source: PostSource, private readonly store: WatchStore,
     private readonly clock: Clock, private readonly config: RuntimeConfig, private readonly hasher: ContentHasher) {}
-  async execute(target: WatchTarget): Promise<number> {
+  async execute(target: WatchTarget, context?: ExecutionContext): Promise<number> {
+    context?.signal.throwIfAborted();
     let identity = this.store.target(target.id);
     const now = this.clock.now().toISOString();
     if (!identity) {
@@ -21,7 +22,9 @@ export class IngestTarget {
     const yesterday = dueDigestWindow(new Date(now), this.config.timeZone, '00:00')!;
     const query = { from: checkpoint.observedAt ?? digestWindowForDay(
       shiftDay(yesterday.day, 1 - this.config.policy.initialBackfillDays), this.config.timeZone).from, to: now };
-    const batch = await this.source.fetch(target, checkpoint.cursor, query);
+    const batch = context ? await context.call(signal => this.source.fetch(target, checkpoint.cursor, query, signal), this.config.services.source.timeoutMs)
+      : await this.source.fetch(target, checkpoint.cursor, query);
+    context?.signal.throwIfAborted();
     if (!batch.complete) throw new IncompleteBatchError();
     const posts = new Map<string, PostVersion>(), jobs = new Map<string, AnalysisJob>();
     for (const post of batch.posts) {

@@ -19,15 +19,7 @@ export interface Dependencies {
 }
 /** Composition root: this is the only place that selects and connects implementations. */
 export function createApplication(config: RuntimeConfig, deps: Dependencies): Scheduler {
-  if (config.mode !== 'demo') throw new Error('Preview/live mode is not implemented in the framework release.');
-  if (deps.analyzer.capability !== 'simulated' || deps.notifications.capability !== 'simulated'
-    || [...deps.sources.values()].some(source => source.capability !== 'simulated')) {
-    throw new Error('Demo mode cannot use real adapters.');
-  }
-  for (const target of config.targets) {
-    if (!deps.sources.has(target.provider)) throw new Error(`Missing source provider: ${target.provider}`);
-  }
-  if (new Set(deps.rules.map(rule => rule.id)).size !== deps.rules.length) throw new Error('Duplicate rule ID.');
+  validateDependencies(config, deps);
   const digest = new DailyDigest(deps.store, deps.digestRenderer, config.recipient, deps.hasher, config.timeZone, config.revision);
   const delivery = new DeliverNotifications(deps.store, deps.notifications, deps.clock);
   const jobs: WatchJobs = {
@@ -40,4 +32,16 @@ export function createApplication(config: RuntimeConfig, deps: Dependencies): Sc
     deliver: () => delivery.execute(),
   };
   return new Scheduler(config, deps.clock, deps.store, jobs, deps.events);
+}
+
+export function validateDependencies(config: RuntimeConfig, deps: Dependencies): void {
+  if (config.mode !== 'demo') throw new Error('Preview/live mode is not implemented in the framework release.');
+  if (deps.analyzer.capability !== 'simulated' || deps.notifications.capability !== 'simulated'
+    || [...deps.sources.values()].some(source => source.capability !== 'simulated')) {
+    throw new Error('Demo mode cannot use real adapters.');
+  }
+  for (const target of config.targets) {
+    if (!deps.sources.has(target.provider)) throw new Error(`Missing source provider: ${target.provider}`);
+  }
+  if (new Set(deps.rules.map(rule => rule.id)).size !== deps.rules.length) throw new Error('Duplicate rule ID.');
 }

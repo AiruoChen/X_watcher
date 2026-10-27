@@ -1,4 +1,4 @@
-import type { Clock, ContentAnalyzer, NotificationRule, WatchStore } from '../domain/ports.js';
+import type { Clock, ContentAnalyzer, ExecutionContext, NotificationRule, WatchStore } from '../domain/ports.js';
 import type { Notification, RuleEvent, RuntimeConfig, VersionedAnalysis, WatchTarget } from '../domain/model.js';
 import { stableId } from '../domain/identifiers.js';
 import { resetEligible } from '../domain/policies/reset.js';
@@ -8,14 +8,17 @@ import { validateAnalysis } from '../domain/validation.js';
 export class ProcessAnalysis {
   constructor(private readonly analyzer: ContentAnalyzer, private readonly store: WatchStore,
     private readonly rules: readonly NotificationRule[], private readonly clock: Clock, private readonly config: RuntimeConfig) {}
-  async execute(target: WatchTarget): Promise<void> {
+  async execute(target: WatchTarget, context?: ExecutionContext, limit = 100): Promise<void> {
     let failed = false;
-    for (const candidate of this.store.pendingAnalysisJobs(target.id, this.clock.now().toISOString(), 100)) {
+    for (const candidate of this.store.pendingAnalysisJobs(target.id, this.clock.now().toISOString(), limit)) {
+      if (context && (context.signal.aborted || !context.canClaim())) break;
       const job = this.store.claimAnalysis(candidate.id, this.clock.now().toISOString());
       if (!job) continue;
       try {
         const post = this.store.postVersion(job.postKey)!;
-        const analysis = await this.analyzer.analyze(post);
+        const analysis = context ? await context.call(signal => this.analyzer.analyze(post, signal), this.config.services.analysis.timeoutMs)
+          : await this.analyzer.analyze(post);
+        context?.signal.throwIfAborted();
         validateAnalysis(post, analysis);
         const now = this.clock.now().toISOString();
         const events: RuleEvent[] = [], notifications: Notification[] = [];
