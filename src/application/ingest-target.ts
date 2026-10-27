@@ -15,8 +15,9 @@ export class IngestTarget {
     if (this.source.capability === 'real') await new ResolveTarget(this.source, this.store, this.clock, this.config).execute(target, context);
     let identity = this.store.target(target.id);
     const discoveredAt = this.clock.now().toISOString();
+    const safetyLagMs = this.config.services.source.provider === 'rsshub' ? this.config.rsshub.safetyLagMs : this.config.x.safetyLagMs;
     const now = this.source.capability === 'real'
-      ? new Date(Math.floor((Date.parse(discoveredAt) - this.config.x.safetyLagMs) / 1000) * 1000).toISOString() : discoveredAt;
+      ? new Date(Math.floor((Date.parse(discoveredAt) - safetyLagMs) / 1000) * 1000).toISOString() : discoveredAt;
     if (!identity) {
       if (this.source.capability !== 'simulated') throw new Error('A real source requires a resolved author identity.');
       identity = this.store.registerTarget({ ...target, authorId: `fixture:${target.handle.toLowerCase()}`,
@@ -39,6 +40,8 @@ export class IngestTarget {
     }
     context?.signal.throwIfAborted();
     if (!batch.complete) throw new IncompleteBatchError();
+    const unverified = batch.coverageStatus === 'unverified';
+    if (unverified !== (batch.scope === 'rsshub_timeline_snapshot') || unverified !== (target.provider === 'rsshub-x')) throw new IncompleteBatchError();
     const coverage = batch.coverage ?? query;
     if (coverage.to !== query.to || Date.parse(coverage.from) > Date.parse(query.from)) throw new IncompleteBatchError();
     const posts = new Map<string, PostVersion>(), jobs = new Map<string, AnalysisJob>();
@@ -60,8 +63,8 @@ export class IngestTarget {
         state: 'pending', revision: 0, attempts: 0, nextAttemptAt: null });
     }
     this.store.commitIngestion({ targetId: target.id, expectedRevision: checkpoint.revision,
-      cursor: batch.nextCursor, observedAt: now, coverage: { ...coverage, id: stableId('coverage', target.id, coverage.from, coverage.to),
-        targetId: target.id, status: 'complete', reason: null, ...(batch.scope ? { scope: batch.scope } : {}) },
+      cursor: batch.nextCursor, observedAt: now, coverage: { ...coverage, id: stableId('coverage', target.id, coverage.from, coverage.to, batch.scope ?? 'default'),
+        targetId: target.id, status: unverified ? 'gap' : 'complete', reason: unverified ? 'rsshub_snapshot_unverified' : null, ...(batch.scope ? { scope: batch.scope } : {}) },
       posts: [...posts.values()], jobs: [...jobs.values()] });
     return posts.size;
   }

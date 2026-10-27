@@ -72,10 +72,23 @@ export function parseConfig(input: unknown): RuntimeConfig {
     requestTimeoutMs: number('X_REQUEST_TIMEOUT_SECONDS', 1, 300) * 1000,
     safetyLagMs: number('X_SAFETY_LAG_SECONDS', 10, 3600) * 1000, overlapMs: number('X_OVERLAP_SECONDS', 0, 3600) * 1000,
     fieldDialect: dialect };
+  let rsshubBase: URL;
+  try { rsshubBase = new URL(text('RSSHUB_BASE_URL')); } catch { throw new ConfigError('RSSHUB_BASE_URL'); }
+  if (!['http:', 'https:'].includes(rsshubBase.protocol) || rsshubBase.username || rsshubBase.password
+    || rsshubBase.search || rsshubBase.hash || /%(?:2f|5c|2e)/i.test(rsshubBase.pathname)
+    || (rsshubBase.protocol === 'http:' && !['127.0.0.1', 'localhost', '[::1]'].includes(rsshubBase.hostname)))
+    throw new ConfigError('RSSHUB_BASE_URL');
+  const rsshub: RuntimeConfig['rsshub'] = { baseUrl: rsshubBase.href.replace(/\/$/, ''),
+    itemLimit: number('RSSHUB_ITEM_LIMIT', 1, 200), requestTimeoutMs: number('RSSHUB_REQUEST_TIMEOUT_SECONDS', 1, 300) * 1000,
+    overlapMs: number('RSSHUB_OVERLAP_HOURS', 1, 2160) * 3_600_000,
+    safetyLagMs: number('RSSHUB_SAFETY_LAG_SECONDS', 0, 3600) * 1000 };
+  if (services.source.provider === 'rsshub' && services.source.credentialEnv !== null) throw new ConfigError('SOURCE_CREDENTIAL_ENV');
+  if (services.source.provider === 'rsshub' && services.source.timeoutMs < rsshub.requestTimeoutMs) throw new ConfigError('SOURCE_TIMEOUT_SECONDS');
   if (services.mail.from !== null) email('MAIL_FROM');
   if (mode !== 'demo') {
-    for (const key of ['SOURCE_PROVIDER','SOURCE_CREDENTIAL_ENV','ANALYSIS_PROVIDER'] as const)
+    for (const key of ['SOURCE_PROVIDER','ANALYSIS_PROVIDER'] as const)
       if (!optional(key)) throw new ConfigError(key);
+    if (services.source.provider !== 'rsshub' && !services.source.credentialEnv) throw new ConfigError('SOURCE_CREDENTIAL_ENV');
     if (!(mode === 'preview' && services.analysis.provider === 'deferred')) {
       for (const key of ['ANALYSIS_CREDENTIAL_ENV','ANALYSIS_MODEL'] as const) if (!optional(key)) throw new ConfigError(key);
     } else if (services.analysis.credentialEnv || services.analysis.model) throw new ConfigError('ANALYSIS_PROVIDER');
@@ -86,10 +99,16 @@ export function parseConfig(input: unknown): RuntimeConfig {
       if (!data[key] || !optional(key)) throw new ConfigError(key);
     if (recipient.toLowerCase().endsWith('.invalid')) throw new ConfigError('NOTIFICATION_TO');
   }
+  if (!['true','false'].includes(text('ANALYSIS_ALLOW_PARTIAL'))) throw new ConfigError('ANALYSIS_ALLOW_PARTIAL');
   const config: Omit<RuntimeConfig, 'revision'> = { schemaVersion: 1, mode,
-    targets: handles.map(handle => ({ id: `x:${handle.toLowerCase()}`, provider: 'x', handle })),
+    targets: handles.map(handle => services.source.provider === 'rsshub'
+      ? { id: `rsshub-x:${handle.toLowerCase()}`, provider: 'rsshub-x', handle }
+      : { id: `x:${handle.toLowerCase()}`, provider: 'x', handle }),
     pollIntervalMs: number('POLL_INTERVAL_MINUTES', 1, 1440) * 60_000, timeZone: zone, dailyDigestAt: at,
-    recipient, storage: { kind, path: text('DATABASE_PATH') }, retry, runtime, x, policy, services,
+    recipient, storage: { kind, path: text('DATABASE_PATH') }, retry, runtime, x, rsshub, policy, services,
+    analysisPolicy: { allowPartial: text('ANALYSIS_ALLOW_PARTIAL') === 'true' },
+    mailPolicy: { account: optional('MAIL_ACCOUNT'), idempotencyTtlMs: number('MAIL_IDEMPOTENCY_TTL_SECONDS', 0, 604800) * 1000,
+      maxAttempts: number('MAIL_MAX_ATTEMPTS', 1, 100) },
     budget: { maxCallsPerDay: optional('MAX_CALLS_PER_DAY') === null ? null : number('MAX_CALLS_PER_DAY', 1, 1e9),
       maxCostPerDay: optional('MAX_COST_PER_DAY') === null ? null : number('MAX_COST_PER_DAY', 0.01, 1e9, false) } };
   return { ...config, revision: createHash('sha256').update(JSON.stringify(config)).digest('hex') };

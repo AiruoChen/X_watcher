@@ -66,8 +66,8 @@ test('schema v2 upgrades without changing pending mail or ownership and creates 
     db.prepare('INSERT INTO notifications(id,state,payload) VALUES(?,?,?)').run(message.id, 'pending', JSON.stringify(message));
     db.close(); const upgraded = s.open(); assert.equal(upgraded.outbox()[0]!.state, 'pending');
     assert.equal(upgraded.runtime.current(), null); assert.deepEqual(upgraded.schedules.tasks(), []);
-    const raw = new DatabaseSync(s.path); assert.equal(raw.prepare('PRAGMA user_version').get()!['user_version'], 3); raw.close();
-    assert.equal(readdirSync(s.root).filter(p => p.includes('.pre-v3.')).length, 1);
+    const raw = new DatabaseSync(s.path); assert.equal(raw.prepare('PRAGMA user_version').get()!['user_version'], MIGRATIONS.length); raw.close();
+    assert.equal(readdirSync(s.root).filter(p => p.includes('.pre-v' + MIGRATIONS.length + '.')).length, 1);
   } finally { s.close(); }
 });
 

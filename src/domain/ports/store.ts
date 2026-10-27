@@ -1,3 +1,4 @@
+import type { MailStore } from './mail.js';
 import type { LegacyWatchStore } from './legacy.js';
 import type { AnalysisJob, AnalysisResult, Coverage, DeliveryAttempt, DeliveryClaim, DeliveryResult,
   DigestReport, Notification, PostVersion, RuleEvent, SourceQuery, TargetIdentity } from '../model.js';
@@ -20,7 +21,7 @@ export interface AnalysisCommit {
 /** Synchronous transaction contracts; clone inputs/outputs and reject inconsistent identities. */
 export interface WorkflowStore {
   /** Reset/correction first; stable FIFO within each priority. Apply the limit after ordering. */
-  pendingNotifications(limit: number): readonly import('../model.js').OutboxEntry[];
+  pendingNotifications(limit: number, now?: string): readonly import('../model.js').OutboxEntry[];
   pendingAnalysisJobs(targetId: string, now: string, limit: number): readonly AnalysisJob[];
   registerTarget(target: TargetIdentity): TargetIdentity;
   target(id: string): TargetIdentity | null;
@@ -29,10 +30,12 @@ export interface WorkflowStore {
   coverage(targetId: string): readonly Coverage[];
   isCovered(targetId: string, query: SourceQuery): boolean;
   postVersion(key: string): PostVersion | null;
+  previousPostVersion(postKey: string, explicitPostId: string | null): PostVersion | null;
   hasPostVersion(key: string): boolean;
   latestVersions(targetId: string, query: SourceQuery): readonly PostVersion[];
   versions(targetId: string): readonly PostVersion[];
   analysisJobs(targetId: string): readonly AnalysisJob[];
+  queueAnalysis(job: AnalysisJob): AnalysisJob;
   claimAnalysis(id: string, now: string): AnalysisJob | null;
   failAnalysis(id: string, expectedRevision: number, nextAttemptAt: string | null): void;
   commitAnalysis(commit: AnalysisCommit): void;
@@ -41,11 +44,11 @@ export interface WorkflowStore {
   ruleEvents(): readonly RuleEvent[];
   createReportWithNotification(report: DigestReport, notification: Notification | null): boolean;
   reports(targetId: string): readonly DigestReport[];
-  claimDelivery(id: string, now: string): DeliveryClaim | null;
+  claimDelivery(id: string, now: string, binding?: import('../model.js').DeliveryBinding): DeliveryClaim | null;
   finishDelivery(attemptId: string, result: DeliveryResult, now: string): void;
   deliveryAttempts(): readonly DeliveryAttempt[];
 }
-export interface WatchStore extends LegacyWatchStore, WorkflowStore {}
+export interface WatchStore extends LegacyWatchStore, WorkflowStore, MailStore {}
 
 export interface ContentHasher { hash(text: string): string }
 

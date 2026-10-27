@@ -11,10 +11,15 @@ export interface PostSource {
   fetch(target: WatchTarget, cursor: string | null, query?: SourceQuery, signal?: AbortSignal): Promise<PostBatch>;
 }
 export interface ContentAnalyzer {
+  readonly supportsPartial?: boolean;
+  readonly version?: string;
+  readonly promptVersion?: string;
   readonly capability: 'simulated' | 'real';
   analyze(post: Post, signal?: AbortSignal): Promise<Analysis>;
 }
 export interface NotificationChannel {
+  deliveryBinding?(notification: Notification, now: string): import('../model.js').DeliveryBinding;
+  sendClaim?(claim: import('../model.js').DeliveryClaim, signal?: AbortSignal): Promise<DeliveryResult>;
   readonly capability: 'simulated' | 'real';
   /** Use notification.id as provider idempotency key, when supported. */
   send(notification: Notification, signal?: AbortSignal): Promise<DeliveryResult>;

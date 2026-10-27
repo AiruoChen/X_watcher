@@ -32,6 +32,9 @@ console.log(describeConfig(custom)); // 不含邮箱、发件人、路径和密�
 | 保留 | POST_RETENTION_DAYS / AUDIT_RETENTION_DAYS | 90 / 180 |
 | 重试 | RETRY_MAX_ATTEMPTS / RETRY_BASE_SECONDS / RETRY_MAX_SECONDS / RETRY_JITTER | 5 / 30 / 1800 / 0.2 |
 | 服务 | SOURCE_PROVIDER / ANALYSIS_PROVIDER / MAIL_PROVIDER | 默认未选；没有硬编码供应商 |
+| RSSHub 地址 | RSSHUB_BASE_URL | http://127.0.0.1:1200；HTTP 仅回环，其他 HTTPS；禁止凭据/query/fragment |
+| RSSHub 时间线 | RSSHUB_ITEM_LIMIT / RSSHUB_REQUEST_TIMEOUT_SECONDS | 100 / 20；1–200 条 / 1–300 秒；来源总超时不小于请求超时 |
+| RSSHub 重读 | RSSHUB_OVERLAP_HOURS / RSSHUB_SAFETY_LAG_SECONDS | 48 / 30；1–2160 小时 / 0–3600 秒；只影响重读，不保证覆盖 |
 | X 分页 | X_MAX_PAGES / X_PAGE_SIZE | 20 / 100；1–100 页 / 10–100 条 |
 | X 时间 | X_REQUEST_TIMEOUT_SECONDS / X_SAFETY_LAG_SECONDS / X_OVERLAP_SECONDS | 10 / 30 / 120 秒；分别 1–300 / 10–3600 / 0–3600 |
 | X 字段 | X_FIELD_DIALECT | post 或显式 tweet；不自动试探第二套付费请求 |
@@ -43,7 +46,7 @@ console.log(describeConfig(custom)); // 不含邮箱、发件人、路径和密�
 
 跨字段规则：最大退避不得小于基础退避；正文保留期覆盖初始回溯、补报日期加一天和重置时效；审计保留期不短于正文。所有数值有上限，不接受 NaN/Infinity/指数或十六进制写法。
 
-preview 的完整服务配置继续要求来源/分析供应商、型号、凭据引用与 SQLite；B04 新增 ANALYSIS_PROVIDER=deferred 分支，分析型号/凭据必须为空，仅要求来源凭据存在。只有 x:probe/x:preview 及常驻组合根开放 x-api-v2 + deferred + 通知预览的只读组合，模型与邮件不运行。live 仍要求完整服务配置且拒绝启动；配置校验不等于实际账户权限验证。
+preview 的完整服务配置继续要求来源/分析供应商、型号、凭据引用与 SQLite；B04 新增 ANALYSIS_PROVIDER=deferred 分支，分析型号/凭据必须为空，官方 API 仅要求来源凭据存在。RSSHub 的 SOURCE_CREDENTIAL_ENV 必须为空，登录 Cookie 在自托管 RSSHub 中配置，应用不读取 Cookie。source:* / rsshub:* / x:* 及常驻组合根开放 rsshub 或 x-api-v2 + deferred + 通知预览的只读组合，模型与邮件不运行。live 仍要求完整服务配置且拒绝启动；配置校验不等于实际账户权限验证。
 
 ## 策略与执行的区别
 
@@ -54,3 +57,11 @@ B03 已消费：运行参数、分阶段退避、每次外部调用超时、有�
 B04 已消费 X 专用参数及真实来源引用，凭据只在组合根传给客户端。仍仅声明并校验：日报宽限/降级、事故阈值、模型/邮件真实服务、预算和自动清理。这些执行能力在 B05–B09 完成；设置字段不会提前启用它们。
 
 demo 与 CI 不读取真实凭据去调用外部服务。收件人仅出现在本地配置/不可变通知中，`describeConfig` 与常规事件不输出它。
+
+## v0.7 分析和邮件接口
+
+新增 ANALYSIS_ALLOW_PARTIAL（默认 false）、MAIL_ACCOUNT（稳定非秘密账号标识，默认空）、MAIL_IDEMPOTENCY_TTL_SECONDS（0–604800，默认 0）、MAIL_MAX_ATTEMPTS（1–100，默认 5）。这些字段参与配置指纹但不进入 describeConfig 的脱敏输出。具体注入及语义见 [分析接口](integrations/analysis.md) 和 [邮件接口](integrations/mail.md)。目前不需填写服务商或密钥；保持 ANALYSIS_PROVIDER=deferred 即可继续 RSSHub 只读运行。
+
+## v0.7.1 审查修复
+
+邮件首次领取将 RETRY_BASE_SECONDS / RETRY_MAX_SECONDS 固化到 binding.retryPolicy；MAIL_MAX_ATTEMPTS 包含首次发送。供应商证明未接收且声明 retryable 后，才按确定性指数退避和 retryAt 下限消费 retry_wait。未知发送不重试，旧绑定不自动补猜策略。升级分析算法时显式提高 ANALYZER_VERSION 并通过重分析用例排队，已保存结果/通知不会自动回放。

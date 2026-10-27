@@ -4,7 +4,7 @@
 
 ## 添加来源
 
-在 `src/adapters/source/` 实现 `PostSource`，在组合根注册 provider -> adapter 映射，配置目标使用对应 provider。应用不解析来源游标。真实来源需要处理分页、限流、超时、初始回溯和账号验证。返回不完整批次不能推进检查点。首版 config 的环境变量解析针对 X；添加 RSS 时扩展配置解析为 provider + target 结构即可，不必改调度器。
+在 `src/adapters/source/` 实现 `PostSource`，在组合根注册 provider -> adapter 映射，配置目标使用对应 provider。应用不解析来源游标。真实来源需要处理分页、限流、超时、初始回溯和账号验证。返回不完整批次不能推进检查点。v0.6 已通过 bootstrap-source 选择 RSSHub 或官方 X，并隔离目标身份。新增来源必须声明查询范围证据；有限 feed 使用 RSSHub 的未验证观察合同，不能伪造完整覆盖。不必改调度器。
 
 ## 添加分析服务
 

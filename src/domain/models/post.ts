@@ -19,8 +19,8 @@ export interface SourcePostMetadata {
   readonly authorId: string;
   readonly sourcePostId: string;
   readonly sourceVersion: string;
-  readonly completeness: 'full' | 'truncated';
-  readonly kind: 'original' | 'reply' | 'quote' | 'repost';
+  readonly completeness: 'full' | 'truncated' | 'unknown';
+  readonly kind: 'original' | 'reply' | 'quote' | 'repost' | 'unknown';
   readonly editHistory: readonly string[];
   readonly references: readonly SourceReference[];
 }
@@ -32,6 +32,6 @@ export interface PostVersion extends Post {
   readonly sourceVersion: string;
   readonly contentHash: string;
   readonly discoveredAt: string;
-  readonly completeness: 'full' | 'truncated';
+  readonly completeness: 'full' | 'truncated' | 'unknown';
   readonly deleted: boolean;
 }

@@ -36,10 +36,11 @@ export function createApplication(config: RuntimeConfig, deps: Dependencies): Sc
 
 export function validateDependencies(config: RuntimeConfig, deps: Dependencies, sourcePreview = false): void {
   if (sourcePreview && config.mode === 'preview') {
-    if (config.services.source.provider !== 'x-api-v2' || config.services.analysis.provider !== 'deferred'
+    const expectedProvider = config.services.source.provider === 'rsshub' ? 'rsshub-x' : 'x';
+    if (!['x-api-v2', 'rsshub'].includes(config.services.source.provider ?? '') || config.services.analysis.provider !== 'deferred'
       || deps.analyzer.capability !== 'simulated' || deps.notifications.capability !== 'simulated'
-      || config.targets.some(target => target.provider !== 'x' || deps.sources.get(target.provider)?.capability !== 'real'))
-      throw new Error('B04 preview requires the real X source, deferred analysis and preview mail.');
+      || config.targets.some(target => target.provider !== expectedProvider || deps.sources.get(target.provider)?.capability !== 'real'))
+      throw new Error('Read-only preview requires a real supported source, deferred analysis and preview mail.');
     return;
   }
   if (config.mode !== 'demo') throw new Error('Preview/live mode is not implemented in this entry point.');

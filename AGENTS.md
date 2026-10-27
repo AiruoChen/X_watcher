@@ -1,7 +1,7 @@
 # X_watcher 开发约定
 
 - Node.js 22.12+、TypeScript strict、ESM；优先内置库。
-- 按 docs/REQUIREMENTS.md 的业务规则与 docs/DEVELOPMENT_PLAN.md 的依赖顺序分块实现，docs/ROADMAP.md 仅记录实际完成度；SQLite 为真实本地持久化，X 可显式只读 preview，模型/邮件仍未真实接入。demo/test/CI 不访问真实服务。
+- 按 docs/REQUIREMENTS.md 的业务规则与 docs/DEVELOPMENT_PLAN.md 的依赖顺序分块实现，docs/ROADMAP.md 仅记录实际完成度；SQLite 为真实本地持久化，X 官方 API / 自托管 RSSHub 可显式只读 preview，模型/邮件已有可注入接口、结构化校验和持久核对，仍未真实接入。demo/test/CI 不访问真实服务。
 - domain 定义模型与端口；application 编排业务；adapters 实现外部协议；runtime 只依赖 domain。
 - 依赖在 bootstrap 中注入。新增来源、分析器、通知渠道和规则优先实现已有接口。
 - 配置通过校验后再使用；账户、收件人、模型与密钥不得写在业务逻辑中。
@@ -14,3 +14,5 @@
 - 新接入真实服务时核对官方协议、账户权限、成本和本机版本，明确失败与幂等语义。
 - 新功能同步 README、架构文档与路线图。关键调度逻辑使用注入时钟验证。
 - 提交前运行 npm run check、npm test、npm run demo。
+
+- RSSHub 是有限快照，只能提交带 rsshub_timeline_snapshot / rsshub_snapshot_unverified 的观察 gap；不得标为完整日期。其 handle 身份不等于稳定 X 数字 ID，不能覆盖旧官方目标。正文完整性 unknown 必须由后续分析策略显式处理，不得改 full 绕过校验。

@@ -33,6 +33,12 @@ CREATE INDEX attempts_notification ON delivery_attempts(notification_id,seq);
 CREATE TABLE runtime_tasks(id TEXT PRIMARY KEY, revision INTEGER NOT NULL CHECK(revision>=0), state TEXT NOT NULL CHECK(state IN ('idle','running','needs_attention')), due_ms INTEGER NOT NULL, payload TEXT NOT NULL CHECK(json_valid(payload))) STRICT;
 CREATE INDEX runtime_task_due ON runtime_tasks(state,due_ms);
 CREATE INDEX notification_priority ON notifications(state,(CASE WHEN json_extract(payload,'$.kind') IN ('reset','correction') THEN 0 ELSE 1 END),seq);
+` }, { version: 4, sql: `
+ALTER TABLE notifications ADD COLUMN revision INTEGER NOT NULL DEFAULT 0 CHECK(revision>=0);
+CREATE INDEX mail_audit_notification ON audit_events(json_extract(payload,'$.notificationId'),seq) WHERE json_extract(payload,'$.kind')='mail_resolution';
+` }, { version: 5, sql: `
+ALTER TABLE notifications ADD COLUMN next_delivery_ms INTEGER CHECK(next_delivery_ms IS NULL OR next_delivery_ms>=0);
+CREATE INDEX notification_retry_due ON notifications(state,next_delivery_ms);
 ` }];
 export const SCHEMA_VERSION = MIGRATIONS.length;
 const checksum = (sql: string): string => createHash('sha256').update(sql).digest('hex');

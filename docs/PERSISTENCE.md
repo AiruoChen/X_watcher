@@ -105,3 +105,17 @@ store.runtime.release(renewed.revision);
 - [Node 22.12 SQLite](https://nodejs.org/download/release/v22.12.0/docs/api/sqlite.html)：DatabaseSync 与特性开关。
 - [SQLite 事务](https://www.sqlite.org/lang_transaction.html)：单写者、IMMEDIATE 事务和回滚。
 - [SQLite VACUUM INTO](https://www.sqlite.org/lang_vacuum.html)：在线一致备份和输出文件要求。
+
+## RSSHub 快照（v0.6）
+
+Schema 仍为 3，不迁移/丢弃旧数据。commitIngestion 允许 RSSHub 专属 scope、gap 和未验证原因 rsshub_snapshot_unverified，与帖子、观察检查点、待分析作业在同一事务提交。gap 不参与 isCovered，因此成功快照不冒充完整一天。推荐独立 rsshub-preview 库；旧作者/官方游标不重写，回退使用旧库或已验证备份。
+
+## v0.7 / schema 4
+
+新增 notifications.revision 和按通知查询邮件审计的索引。旧快照、尝试和未知状态原样保留，迁移前备份。claim/finish/recovery/resolve 都递增 revision；resolve 的比较、状态和 audit_events 在同一事务完成。attempt.binding 保存供应商/账号/发件人/幂等键/到期时间/次数上限，旧无 binding 记录不能自动补猜查询身份。原始发送尝试结果不会被人工处理覆盖。deliveryRecord 在单个 SQL 查询内读取状态、revision 与最新尝试。
+
+## v0.7.1 / schema 5
+
+新增 notifications.next_delivery_ms 与 notification_retry_due 索引，旧通知、发送尝试及待核对状态原样保留。只有明确未接收且可重试的结果能进入 retry_wait；attempt 结果、通知状态、nextAttemptAt 和 revision 在同一事务保存。队列查询与领取都验证到期时间，领取时清除期限；异常恢复将已领取的发送标为未知而非重新排队。绑定中保存的重试策略、账号和幂等期限不随当前配置变化。没有可证明策略/期限的旧记录不自动消费。
+
+更正分析的 correctionLink、规则事件和通知 supersedesPostKey 同事务保存，关联只允许同来源/目标/作者、已存在且排在当前版本之前的记录；不能用模型提供的本地键或未来版本冒充前驱。旧不可变快照不覆盖，数据清理阶段须保留这些关联依赖。
