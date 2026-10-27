@@ -1,0 +1,18 @@
+/** Version 1 accepts string-valued environment-style configuration, never raw secrets. */
+export const CONFIG_SCHEMA = {
+  CONFIG_SCHEMA_VERSION: '1', APP_MODE: 'demo', WATCH_HANDLES: 'thsottiaux', POLL_INTERVAL_MINUTES: '30',
+  TIME_ZONE: 'Asia/Shanghai', DAILY_DIGEST_AT: '08:00', NOTIFICATION_TO: 'reader@example.invalid',
+  STORAGE_KIND: 'memory', DATABASE_PATH: 'data/x-watcher.sqlite',
+  INITIAL_BACKFILL_DAYS: '1', RESET_MAX_AGE_HOURS: '24', DIGEST_CATCH_UP_DAYS: '7',
+  MAX_CATCH_UP_EMAILS: '3', DIGEST_GRACE_MINUTES: '15', FAILURE_THRESHOLD: '3', STALE_AFTER_MINUTES: '90',
+  POST_RETENTION_DAYS: '90', AUDIT_RETENTION_DAYS: '180',
+  RETRY_MAX_ATTEMPTS: '5', RETRY_BASE_SECONDS: '30', RETRY_MAX_SECONDS: '1800', RETRY_JITTER: '0.2',
+  SOURCE_PROVIDER: '', SOURCE_CREDENTIAL_ENV: '', SOURCE_TIMEOUT_SECONDS: '30',
+  ANALYSIS_PROVIDER: '', ANALYSIS_CREDENTIAL_ENV: '', ANALYSIS_MODEL: '', ANALYZER_VERSION: 'fixture-v1',
+  PROMPT_VERSION: 'v1', ANALYSIS_TIMEOUT_SECONDS: '120', MAIL_PROVIDER: '', MAIL_CREDENTIAL_ENV: '',
+  MAIL_FROM: '', MAIL_TIMEOUT_SECONDS: '30', MAX_CALLS_PER_DAY: '', MAX_COST_PER_DAY: '',
+} as const;
+export type ConfigField = keyof typeof CONFIG_SCHEMA;
+export class ConfigError extends Error {
+  constructor(readonly field: string) { super(`Invalid or missing configuration field: ${field}`); }
+}

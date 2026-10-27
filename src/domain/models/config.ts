@@ -1,0 +1,42 @@
+import type { WatchTarget } from './target.js';
+export interface RuntimeConfig {
+  readonly schemaVersion: 1;
+  readonly revision: string;
+  readonly storage: { readonly kind: 'memory' | 'sqlite'; readonly path: string };
+  readonly policy: BusinessPolicy;
+  readonly retry: RetryPolicy;
+  readonly services: {
+    readonly source: ServiceConfig;
+    readonly analysis: ServiceConfig & { readonly model: string | null; readonly version: string; readonly promptVersion: string };
+    readonly mail: ServiceConfig & { readonly from: string | null };
+  };
+  readonly budget: { readonly maxCallsPerDay: number | null; readonly maxCostPerDay: number | null };
+  readonly mode: 'demo' | 'preview' | 'live';
+  readonly targets: readonly WatchTarget[];
+  readonly pollIntervalMs: number;
+  readonly timeZone: string;
+  readonly dailyDigestAt: string;
+  readonly recipient: string;
+}
+export interface RetryPolicy {
+  readonly maxAttempts: number;
+  readonly baseDelayMs: number;
+  readonly maxDelayMs: number;
+  readonly jitterRatio: number;
+}
+export interface BusinessPolicy {
+  readonly initialBackfillDays: number;
+  readonly resetMaxAgeMs: number;
+  readonly digestCatchUpDays: number;
+  readonly maxCatchUpEmailsPerCycle: number;
+  readonly digestGraceMinutes: number;
+  readonly failureThreshold: number;
+  readonly staleAfterMs: number;
+  readonly postRetentionDays: number;
+  readonly auditRetentionDays: number;
+}
+export interface ServiceConfig {
+  readonly provider: string | null;
+  readonly credentialEnv: string | null;
+  readonly timeoutMs: number;
+}

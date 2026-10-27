@@ -1,6 +1,6 @@
 # 扩展指南
 
-本页介绍当前框架的接口替换方式。完整生产实现按 [开发计划](DEVELOPMENT_PLAN.md) 的 B01–B09 推进，目标规则见 [需求文档](REQUIREMENTS.md)。新增存储前先完成 B01 的抓取/分析事务合同演进。
+本页介绍当前框架的接口替换方式。完整生产实现按 [开发计划](DEVELOPMENT_PLAN.md) 的 B01–B09 推进，目标规则见 [需求文档](REQUIREMENTS.md)。B01 已完成抓取/分析合同演进，新增存储应实现 ports/store.ts 并复用 tests/contracts/watch-store.contract.ts。
 
 ## 添加来源
 

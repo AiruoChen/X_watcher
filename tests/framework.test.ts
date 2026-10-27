@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { Sha256Hasher } from '../src/adapters/hash.js';
 import { loadConfig } from '../src/config.js';
 import { createApplication } from '../src/bootstrap.js';
 import { ManualClock } from '../src/adapters/clock.js';
@@ -30,8 +31,10 @@ function harness(source?: PostSource, analyzer?: ContentAnalyzer) {
   const store = new MemoryStore();
   const clock = new ManualClock(new Date('2026-01-02T00:00:00Z'));
   const channel = new PreviewChannel();
+  store.registerTarget({ ...target, authorId: `fixture:${target.handle.toLowerCase()}`, enabled: true,
+    monitorStartedAt: '2025-12-31T00:00:00Z', configRevision: config.revision });
   const events: AppEvent[] = [];
-  const dependencies = { sources: new Map([['x', source ?? new FixtureSource([post])]]),
+  const dependencies = { hasher: new Sha256Hasher(), sources: new Map([['x', source ?? new FixtureSource([post])]]),
     analyzer: analyzer ?? new FixtureAnalyzer(new Map([[post.id, analysis]])),
     notifications: channel, store, clock, rules: [new ResetRule()],
     digestRenderer: new TextDigestRenderer(), events: { record: (event: AppEvent) => { events.push(event); } } };
@@ -40,7 +43,7 @@ function harness(source?: PostSource, analyzer?: ContentAnalyzer) {
 }
 function poll(h: ReturnType<typeof harness>, source: PostSource, analyzer?: ContentAnalyzer): PollTarget {
   return new PollTarget(source, analyzer ?? h.dependencies.analyzer, h.store,
-    h.dependencies.rules, h.clock, config.recipient);
+    h.dependencies.rules, h.clock, config, h.dependencies.hasher);
 }
 
 test('configuration validates usernames, schedule, timezone, and recipient', () => {
@@ -127,14 +130,17 @@ test('incomplete pagination leaves posts, notifications, and checkpoint untouche
   assert.equal(h.store.outbox().length, 0);
 });
 
-test('analysis failure rolls back the whole batch; next poll can retry safely', async () => {
+test('analysis failure retains ingestion and defers only failed jobs', async () => {
   const h = harness();
   const source = new FixtureSource([post, { ...post, id: 'second' }]);
   await assert.rejects(poll(h, source).execute(target));
-  assert.equal(h.store.hasPost(target.id, post.id), false);
-  assert.equal(h.store.checkpoint(target.id).cursor, null);
+  assert.equal(h.store.hasPost(target.id, post.id), true);
+  assert.equal(h.store.checkpoint(target.id).cursor, '2');
+  assert.deepEqual(h.store.analysisJobs(target.id).map(j => j.state), ['completed', 'retry_wait']);
+  h.clock.advance(31_000);
   const analyzer: ContentAnalyzer = { capability: 'simulated', analyze: async () => analysis };
-  assert.equal(await poll(h, source, analyzer).execute(target), 2);
+  assert.equal(await poll(h, source, analyzer).execute(target), 0);
+  assert.ok(h.store.analysisJobs(target.id).every(j => j.state === 'completed'));
 });
 
 test('duplicate items in one batch and later batches are analyzed only once', async () => {
@@ -214,14 +220,14 @@ test('fabricated reset evidence and times are rejected; absent time stays unknow
   assert.match(alert.text, /原文未明确说明/);
 });
 
-test('digest excludes the next day and requires successful retrieval after the window', () => {
-  const store = new MemoryStore();
-  const digest = new DailyDigest(store, new TextDigestRenderer(), message.recipient);
+test('digest requires full coverage and excludes the next day', async () => {
+  const h = harness();
+  const digest = new DailyDigest(h.store, new TextDigestRenderer(), message.recipient, h.dependencies.hasher, config.timeZone, config.revision);
   const window = dueDigestWindow(new Date(message.createdAt), 'Asia/Shanghai', '08:00')!;
   assert.equal(digest.execute(target, window, message.createdAt), false);
-  store.commitPoll({ targetId: target.id, expectedRevision: 0, cursor: '1', observedAt: message.createdAt,
-    posts: [{ post, analysis }, { post: { ...post, id: 'next-day', publishedAt: window.to }, analysis }], notifications: [] });
-  assert.equal(store.listPosts(target.id, window).length, 1);
+  await poll(h, new FixtureSource([post, { ...post, id: 'next-day', publishedAt: window.to }]),
+    { capability: 'simulated', analyze: async () => analysis }).execute(target);
+  assert.equal(h.store.listPosts(target.id, window).length, 1);
   assert.equal(digest.execute(target, window, message.createdAt), true);
   assert.equal(digest.execute(target, window, message.createdAt), false);
 });

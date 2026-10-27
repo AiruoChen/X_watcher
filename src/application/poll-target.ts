@@ -1,33 +1,19 @@
-import type { Clock, ContentAnalyzer, NotificationRule, PostSource, WatchStore } from '../domain/ports.js';
-import type { AnalyzedPost, WatchTarget } from '../domain/model.js';
-import { IncompleteBatchError } from '../domain/errors.js';
-import { validateAnalysis, validatePost } from '../domain/validation.js';
-
+import type { Clock, ContentAnalyzer, ContentHasher, NotificationRule, PostSource, WatchStore } from '../domain/ports.js';
+import type { RuntimeConfig, WatchTarget } from '../domain/model.js';
+import { IngestTarget } from './ingest-target.js';
+import { ProcessAnalysis } from './process-analysis.js';
+/** Compatibility facade; individual stages are reusable independently. */
 export class PollTarget {
-  constructor(private readonly source: PostSource, private readonly analyzer: ContentAnalyzer,
-    private readonly store: WatchStore, private readonly rules: readonly NotificationRule[],
-    private readonly clock: Clock, private readonly recipient: string) {}
-
+  private readonly ingest: IngestTarget;
+  private readonly analysis: ProcessAnalysis;
+  constructor(source: PostSource, analyzer: ContentAnalyzer, store: WatchStore,
+    rules: readonly NotificationRule[], clock: Clock, config: RuntimeConfig, hasher: ContentHasher) {
+    this.ingest = new IngestTarget(source, store, clock, config, hasher);
+    this.analysis = new ProcessAnalysis(analyzer, store, rules, clock, config);
+  }
   async execute(target: WatchTarget): Promise<number> {
-    const checkpoint = this.store.checkpoint(target.id);
-    // Capture query start, not completion, for coverage checks.
-    const observedAt = this.clock.now().toISOString();
-    const batch = await this.source.fetch(target, checkpoint.cursor);
-    if (!batch.complete) throw new IncompleteBatchError();
-    const posts: AnalyzedPost[] = [];
-    const seen = new Set<string>();
-    for (const post of batch.posts) {
-      validatePost(post, target);
-      if (seen.has(post.id) || this.store.hasPost(target.id, post.id)) continue;
-      seen.add(post.id);
-      const analysis = await this.analyzer.analyze(post);
-      validateAnalysis(post, analysis);
-      posts.push({ post, analysis });
-    }
-    const notifications = posts.flatMap(item => this.rules.flatMap(rule =>
-      rule.evaluate(item, this.recipient, observedAt)));
-    this.store.commitPoll({ targetId: target.id, expectedRevision: checkpoint.revision,
-      cursor: batch.nextCursor, observedAt, posts, notifications });
-    return posts.length;
+    const count = await this.ingest.execute(target);
+    await this.analysis.execute(target);
+    return count;
   }
 }
