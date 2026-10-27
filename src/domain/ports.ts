@@ -6,3 +6,4 @@ export type * from './ports/analysis.js';
 export type * from './ports/mail.js';
 export type * from './ports/reporting.js';
 export type * from './ports/operations.js';
+export type * from './ports/deployment.js';

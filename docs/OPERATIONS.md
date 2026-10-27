@@ -85,7 +85,7 @@ BUDGET_PRICE_REFERENCE=
 
 ## 备份、恢复与历史导出
 
-建议每日一份备份，升级和清理前额外备份；定期用新路径恢复并核查去重。操作系统的定时服务包装属于 B09，当前使用明确命令，不安装后台计划。
+建议每日一份备份，升级和清理前额外备份；定期用新路径恢复并核查去重。B09 已提供可选的隔离 Docker 备份进程与停止/恢复包装，默认不启动；见 [DEPLOYMENT.md](DEPLOYMENT.md)。本地人工命令继续可用。
 
 ```powershell
 npm run ops:backup -- data/backups/manual-01.sqlite
@@ -120,3 +120,7 @@ apply 使用当前保留配置重算相同预览时刻，核验指纹，先创�
 OperationsStore / CallGate / CallPermit 为领域接口；BudgetController 和 ManageHealth 编排业务；SqliteOperations、SqliteRetention、ConsoleEvents 与导出适配器处理外部协议。运行层仅消费领域端口，不导入业务用例或数据库 SDK。Schema 7 保留原有 1–6 校验和，升级前有效备份。
 
 operations:demo 完整离线展示预算暂停/跨日恢复、事故去重、备份恢复和保护性清理。新增测试覆盖真实 SQLite 事务、控制命令、跨连接/重启、失败回滚、保留依赖和脱敏 CLI。真实模型/邮件质量与时效、RSSHub 实例、部署包装仍未验收，见 B09 路线图。
+
+## v0.10 部署衔接
+
+部署入口与只读健康检查、同一构建/配置的连续预览证据、发布门禁和可选每日备份见 [DEPLOYMENT.md](DEPLOYMENT.md)。容器内通过 maintenance 服务调用现有 ops:*，不会另建抓取通道。应用/镜像/验收结果与真实服务验证分开记录，见 [RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md)。

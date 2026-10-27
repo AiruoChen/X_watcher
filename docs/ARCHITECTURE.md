@@ -122,3 +122,11 @@ OperationsStore 以独立端口挂在持久 WatchStore 上，BudgetController / 
 另一个 CLI 进程仅追加受限命令，原宿主在脉冲中消费，再使用同一任务 revision 与领取路径；停止请求绑定宿主会话。预算暂停有独立原因和期限，保留待办与计数，不变成来源永久失败。运行层只消费领域回调，业务和数据库仍在组合根注入。
 
 Schema 7 保存日汇总、调用许可、健康/事故、控制队列及 retained_keys。清理在有效备份之后重验预览指纹并保留引用图及最小去重键；归档正文不会变成零帖证明。ConsoleEvents 明确投影字段，历史导出是单独的敏感产物。操作与边界见 [OPERATIONS.md](OPERATIONS.md)。
+
+## B09 部署与验收（v0.10）
+
+Docker 多阶段构建仅复制运行代码与依赖，凭据、用户数据及 Git 元数据留在镜像外。构建脚本记录版本、schema、sourceHash、lockHash、提交与工作区状态；部署会话绑定配置、构建及实际进程启动身份。只读健康不迁移数据库，周期查询只取近期有界观察；显式 preflight/init 执行深度检查。
+
+BackupSchedule 只依赖时钟、等待器、任务和观察端口，备份适配器复用有效快照与不覆盖发布。Linux proc 标识补足 PID 复用证明，旧/未知宿主继续受执行权与 revision 围栏约束，发送中工作仍隔离。
+
+acceptance 执行器将真实测试结果映射 AC-01–20，记录合成时效、可选容量及候选构建。release:check 校验提供证据的哈希/提交/版本与完整映射；真实质量、邮件和 live 适配器门槛独立保留，任何本地 JSON 都不能开启 live。模块入口见 [DEPLOYMENT.md](DEPLOYMENT.md)。

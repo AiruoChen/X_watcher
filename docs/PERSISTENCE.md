@@ -129,3 +129,7 @@ Schema 仍为 3，不迁移/丢弃旧数据。commitIngestion 允许 RSSHub 专�
 新增 notifications.next_delivery_ms 与 notification_retry_due 索引，旧通知、发送尝试及待核对状态原样保留。只有明确未接收且可重试的结果能进入 retry_wait；attempt 结果、通知状态、nextAttemptAt 和 revision 在同一事务保存。队列查询与领取都验证到期时间，领取时清除期限；异常恢复将已领取的发送标为未知而非重新排队。绑定中保存的重试策略、账号和幂等期限不随当前配置变化。没有可证明策略/期限的旧记录不自动消费。
 
 更正分析的 correctionLink、规则事件和通知 supersedesPostKey 同事务保存，关联只允许同来源/目标/作者、已存在且排在当前版本之前的记录；不能用模型提供的本地键或未来版本冒充前驱。旧不可变快照不覆盖，数据清理阶段须保留这些关联依赖。
+
+## v0.10 部署恢复
+
+schema 保持 7；租约 JSON 可选记录 Linux 内核/进程启动标识，用于同一记录宿主上证明 PID 已被复用。证明缺失仍保持隔离，不能将未知发送自动改 pending。构建/会话元数据在独立忽略目录，不写入帖子正文或凭据。容器迁移与正常回滚使用停止后制作的恢复点，详见 [DEPLOYMENT.md](DEPLOYMENT.md)。

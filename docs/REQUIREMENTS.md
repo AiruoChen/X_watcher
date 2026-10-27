@@ -2,7 +2,7 @@
 
 版本：1.1 · 编写日期：2026-10-23 · 状态：需求设计基线，尚未全部实现。
 
-本文件定义目标产品；当前 v0.9 提供 SQLite、运行宿主、显式只读来源、分析/邮件接口及 B07/B08 日报、运维和预算业务的离线验证；真实服务和生产日报闭环尚未启用。实际能力见 [日报说明](REPORTING.md) 和 [运维手册](OPERATIONS.md)。2026-10-23 用户选择自托管 RSSHub，有限快照的能力调整见本文 1.5，完整 V1 门槛不能据此视为已满足。开发顺序与实现入口见 [DEVELOPMENT_PLAN.md](DEVELOPMENT_PLAN.md)，当前完成度见 [ROADMAP.md](ROADMAP.md)。需求变更必须同时更新验收用例和对应开发块。
+本文件定义目标产品；当前 v0.10 提供 SQLite、运行宿主、显式只读来源、分析/邮件接口、B07/B08 业务及 B09 Docker 包装和离线验收工具；真实服务和生产日报闭环尚未启用。实际能力见 [日报说明](REPORTING.md) 和 [运维手册](OPERATIONS.md)、[部署与验收门槛](RELEASE_CHECKLIST.md)。2026-10-23 用户选择自托管 RSSHub，有限快照的能力调整见本文 1.5，完整 V1 门槛不能据此视为已满足。开发顺序与实现入口见 [DEVELOPMENT_PLAN.md](DEVELOPMENT_PLAN.md)，当前完成度见 [ROADMAP.md](ROADMAP.md)。需求变更必须同时更新验收用例和对应开发块。
 
 ## 1. 目标与边界
 

@@ -2,7 +2,9 @@
 
 一个可扩展的 X 推文监测 agent 框架。首个场景是关注 `@thsottiaux`：每半小时读取新推文，发现重置相关信息后提醒，并在北京时间每天 **08:00** 整理前一天的内容与其中提到的 ChatGPT 更新。
 
-> **当前 v0.9 已完成 B08 运维/预算业务代码与离线验证。** 新增状态/用量/通知查询、同任务立即检查、优雅停止与显式恢复、故障/恢复去重、逐请求预算、备份恢复、历史导出和带依赖保护的手动清理；SQLite schema 7 保留旧数据并验证备份迁移。305 项离线测试通过，运行 `npm run operations:demo` 查看演示；命令、配置与操作影响见 [运维手册](docs/OPERATIONS.md)。
+> **当前 v0.10 已提供 B09 Docker 部署包装与自动验收工具。** 包含显式初始化、只读健康检查、可追溯构建、持久卷、可选每日备份、容器强停恢复及发布门禁。324 项离线测试通过，AC-01–20 逐项映射；已实测 10 个模拟目标 / 10 万历史版本。部署见 [DEPLOYMENT.md](docs/DEPLOYMENT.md)，实际结果和待执行门槛见 [RELEASE_CHECKLIST.md](docs/RELEASE_CHECKLIST.md)。
+
+> B08 已提供运维、预算、核对及保护性清理，详见 [运维手册](docs/OPERATIONS.md)。真实 48 小时 preview、模型质量和受控邮件尚未验收，`productionReady=false`；本次没有启用真实 agent。
 
 > B07 已提供 08:00 日报补查、08:15 等待/原文降级、最近 7 日补报及不可变历史更正，详见 [日报模块](docs/REPORTING.md)。
 
@@ -16,7 +18,7 @@
 
 目标产品的完整规则见 [需求文档](docs/REQUIREMENTS.md)，后续实现见 [分块开发计划](docs/DEVELOPMENT_PLAN.md)。两份文档描述未来生产能力；当前提供模拟演示及显式真实只读入口，尚未形成分析/发信闭环。
 
-开发主线：**领域合同 → SQLite → 可恢复运行 → 真实 X → 分析/重置 → 邮件/核对 → 日报/补报 → 运维/预算 → 部署验收**。B05/B06 通用接口和 B07 日报业务已通过离线验证；B08 运维/预算也已通过离线验证；后续为 B09 发布包装，以及服务商接入和受控真实验收。RSSHub 的真实核验需先启动自托管实例并配置登录 Cookie；官方 API 方案的 Token 联调仍可独立进行。
+开发主线：**领域合同 → SQLite → 可恢复运行 → 真实 X → 分析/重置 → 邮件/核对 → 日报/补报 → 运维/预算 → 部署验收**。B05/B06 通用接口和 B07 日报业务已通过离线验证；B08 运维/预算也已通过离线验证；B09 包装和离线验收工具已提供，后续仍需服务商接入、真实观察与生产门槛验收。RSSHub 的真实核验需先启动自托管实例并配置登录 Cookie；官方 API 方案的 Token 联调仍可独立进行。
 
 ## 快速开始
 
@@ -32,6 +34,7 @@ npm run storage:demo
 npm run runtime:demo
 npm run reporting:demo
 npm run operations:demo
+npm run acceptance:offline
 ```
 
 演示使用固定时钟、虚构历史/新推文、内存存储及邮件预览，运行两次 tick 验证同一进程中不会重复通知。没有网络请求，不需要 API 密钥。
@@ -39,6 +42,12 @@ npm run operations:demo
 复制 `.env.example` 为 `.env`，可调整监测账号、轮询间隔、时区、摘要时间、收件人。然后运行 `npm start` 读取配置并执行一次模拟演示；它会退出，**不是常驻服务**。在当前演示中，日期固定为 2026-01-02，北京时间 08:00，因此其他时区/摘要时间可能尚未到点。真实邮箱仅保存在忽略的 `.env` 中。
 
 运行常驻模拟宿主：在 `.env` 中设置 `APP_MODE=demo`、`STORAGE_KIND=sqlite`，首次执行 `npm run watch -- --create`；后续执行 `npm run watch`。它使用系统时钟、真实 SQLite 和空模拟来源，只生成空报告状态，不读取 X、不发邮件；按 Ctrl+C 优雅停止。新库必须显式创建，坏库不会被覆盖。`runtime:demo` 则使用虚构帖子和虚拟时钟，自动验证启动、停止、重新打开及摘要预览去重后退出。详见 [运行模块](docs/RUNTIME.md)。
+
+## 部署与验收
+
+`deploy/watcher` 提供与现有 RSSHub 合并的 Docker 包装。配置与数据在镜像外，运行代码只读；使用 `deploy:init` 显式创建数据，`deploy:run` 启动，`deploy:health` 只读检查，`release:check` 列出未满足的生产门槛。备份计划通过可选 profile 启动，详见 [部署说明](docs/DEPLOYMENT.md)。
+
+`npm run acceptance:offline` 生成场景/构建绑定报告；`npm run acceptance:capacity` 同时执行十万版本基准。CI 保留四组平台验收和一组 Linux 容器演练产物，合成结果不会被写成真实服务验收。
 
 ## 本地运维与预算
 

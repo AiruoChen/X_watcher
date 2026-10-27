@@ -6,12 +6,14 @@ import type { AuditRecord, RuntimeOwnership } from '../../../domain/model.js';
 import { requireRevision } from '../../../domain/policies/state.js';
 import { SystemClock } from '../../clock.js';
 import { transaction } from './transaction.js';
-export interface RuntimeLease extends RuntimeOwnership { readonly pid: number; readonly sessionId?: string }
+import { processIdentity } from './process-identity.js';
+export interface RuntimeLease extends RuntimeOwnership { readonly pid: number; readonly sessionId?: string; readonly processIdentity?: string }
 export interface ClaimsOptions {
   readonly clock?: Clock;
   readonly hostId?: string;
   readonly ownerId?: string;
   readonly pid?: number;
+  readonly identifyProcess?: (pid:number)=>string|null;
   readonly isProcessAlive?: (pid: number) => boolean | null;
 }
 function alive(pid: number): boolean | null {
@@ -24,11 +26,13 @@ export class RuntimeClaims implements RuntimeLeaseControl {
   private readonly ownerId: string;
   private readonly pid: number;
   private readonly probe: (pid: number) => boolean | null;
+  private readonly identify: (pid:number)=>string|null;
   private heldRevision: number | null = null;
   private heldUntilMonotonic = -Infinity;
   constructor(private readonly db: DatabaseSync, options: ClaimsOptions = {}) {
     this.clock = options.clock ?? new SystemClock(); this.hostId = options.hostId ?? hostname();
     this.ownerId = options.ownerId ?? randomUUID(); this.pid = options.pid ?? process.pid; this.probe = options.isProcessAlive ?? alive;
+    this.identify = options.identifyProcess ?? (options.isProcessAlive ? ()=>null : processIdentity);
     if (!this.ownerId.trim() || !this.hostId.trim() || !Number.isSafeInteger(this.pid) || this.pid < 1) throw new Error('Invalid runtime identity.');
   }
   workerId(): string { return this.ownerId; }
@@ -43,12 +47,15 @@ export class RuntimeClaims implements RuntimeLeaseControl {
     this.duration(leaseMs);
     const before = this.row(), now = this.now();
     // OS liveness checks happen OUTSIDE the SQLite transaction; revision is rechecked inside.
+    const currentIdentity=before.lease?.processIdentity ? this.identify(before.lease.pid) : null;
+    const replaced=!!before.lease?.processIdentity && currentIdentity!==null && currentIdentity!==before.lease.processIdentity;
     const reclaimable = before.lease !== null && before.lease.hostId === this.hostId
-      && Date.parse(before.lease.leaseUntil) <= Date.parse(now) && this.probe(before.lease.pid) === false;
+      && (replaced || (Date.parse(before.lease.leaseUntil) <= Date.parse(now) && this.probe(before.lease.pid) === false));
+    const identity=this.identify(this.pid);
     const acquired = transaction(this.db, () => {
       const row = this.row();
       if (row.revision !== before.revision || (row.lease !== null && !reclaimable)) return null;
-      const lease: RuntimeLease = { ownerId: this.ownerId, hostId: this.hostId, pid: this.pid, sessionId: randomUUID(),
+      const lease: RuntimeLease = { ownerId: this.ownerId, hostId: this.hostId, pid: this.pid, sessionId: randomUUID(), ...(identity ? {processIdentity:identity} : {}),
         revision: row.revision + 1, acquiredAt: now, leaseUntil: new Date(Date.parse(now) + leaseMs).toISOString() };
       this.db.prepare('UPDATE runtime_ownership SET revision=?,payload=? WHERE singleton=1').run(lease.revision, JSON.stringify(lease));
       this.audit('acquire_runtime', lease.revision); return lease;

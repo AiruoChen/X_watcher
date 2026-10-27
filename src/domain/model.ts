@@ -12,3 +12,4 @@ export type * from './models/semantic-analysis.js';
 export type * from './models/mail.js';
 export type * from './models/reporting.js';
 export type * from './models/operations.js';
+export type * from './models/deployment.js';
