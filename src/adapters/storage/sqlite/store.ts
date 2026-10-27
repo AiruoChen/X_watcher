@@ -23,6 +23,7 @@ import { transaction } from './transaction.js';
 import { backupDatabase, type BackupManifest } from './backup.js';
 import { RuntimeClaims, type ClaimsOptions } from './claims.js';
 import { SqliteRuntimeState } from './runtime-state.js';
+import { SqliteOperations } from './operations.js';
 
 const pack = (value: unknown): string => JSON.stringify(structuredClone(value));
 /** Indexed row storage. No process-wide cache is authoritative. */
@@ -31,9 +32,10 @@ export class SqliteStore implements WatchStore {
   private readonly db;
   readonly runtime: RuntimeClaims;
   readonly schedules: SqliteRuntimeState;
+  readonly operations: SqliteOperations;
   constructor(path: string, options: { create?: boolean; claims?: ClaimsOptions } = {}) {
     this.db = openDatabase(path, options.create ?? false);
-    try { this.runtime = new RuntimeClaims(this.db, options.claims); this.schedules = new SqliteRuntimeState(this.db, this.runtime); }
+    try { this.runtime = new RuntimeClaims(this.db, options.claims); this.schedules = new SqliteRuntimeState(this.db, this.runtime); this.operations = new SqliteOperations(this.db, this.runtime); }
     catch (error) { this.db.close(); throw error; }
   }
   close(): void { this.db.close(); }
@@ -51,6 +53,10 @@ export class SqliteStore implements WatchStore {
   }
   private reportInputsRaw(targetId: string, window: DigestWindow): ReportInputs {
     if (!this.target(targetId)) throw new Error('Unknown report target.');
+    if (this.db.prepare("SELECT 1 FROM retained_keys WHERE kind='report' AND target_id=? AND json_extract(payload,'$.day')=?").get(targetId, window.day))
+      throw new Error('Report archived by retention; restore a backup for the original content.');
+    if (this.db.prepare("SELECT 1 FROM retained_keys k WHERE k.kind='post' AND k.target_id=? AND json_extract(k.payload,'$.publishedAt')>=? AND json_extract(k.payload,'$.publishedAt')<? AND NOT EXISTS (SELECT 1 FROM post_versions p WHERE p.target_id=k.target_id AND p.post_id=json_extract(k.payload,'$.postId')) LIMIT 1")
+      .get(targetId,window.from,window.to)) throw new Error('Source content archived; restore a backup before generating this date.');
     const previous = this.one<DigestReport>('SELECT payload FROM digest_reports WHERE target_id=? AND day=? ORDER BY revision DESC LIMIT 1', targetId, window.day);
     const previousItems: readonly ReportItem[] = (previous as Partial<ReportSnapshot> | null)?.items ?? (previous?.postKeys.map(k => {
       const post = this.postVersion(k); if (!post) throw new Error('Missing old report source.');
@@ -116,7 +122,8 @@ export class SqliteStore implements WatchStore {
   }
   hasPost(targetId: string, postId: string): boolean {
     return !!this.db.prepare('SELECT 1 FROM post_versions WHERE target_id=? AND post_id=? LIMIT 1').get(targetId, postId)
-      || !!this.db.prepare('SELECT 1 FROM legacy_posts WHERE target_id=? AND post_id=?').get(targetId, postId);
+      || !!this.db.prepare('SELECT 1 FROM legacy_posts WHERE target_id=? AND post_id=?').get(targetId, postId)
+      || !!this.db.prepare("SELECT 1 FROM retained_keys WHERE kind='post' AND target_id=? AND json_extract(payload,'$.postId')=? LIMIT 1").get(targetId, postId);
   }
   private saveCoverage(coverage: Coverage): void {
     const old = this.one<Coverage>('SELECT payload FROM coverage_ranges WHERE id=?', coverage.id);
@@ -133,6 +140,7 @@ export class SqliteStore implements WatchStore {
         || !isInstant(range.from) || !isInstant(range.to) || Date.parse(range.from) >= Date.parse(range.to)
         || range.to !== commit.observedAt || (checkpoint.observedAt !== null && Date.parse(range.to) < Date.parse(checkpoint.observedAt))) throw new Error('Invalid complete coverage.');
       for (const post of commit.posts) {
+        if (this.db.prepare("SELECT 1 FROM retained_keys WHERE kind='post' AND id=?").get(post.key)) throw new Error('Archived post version cannot be re-ingested.');
         validatePost(post, target);
         if (post.targetId !== target.id || post.provider !== target.provider || post.authorId !== target.authorId
           || post.key !== stableId('post', target.provider, target.authorId, post.id, post.sourceVersion)
@@ -183,7 +191,8 @@ export class SqliteStore implements WatchStore {
       OR json_extract(p.payload,'$.origin.sourcePostId') IN (${marks})) ORDER BY p.seq DESC`, post.targetId, postKey, ...ids, ...ids);
     return candidates.find(p => correctionBasis(post, p, explicitPostId) !== null) ?? null;
   }
-  hasPostVersion(key: string): boolean { return !!this.db.prepare('SELECT 1 FROM post_versions WHERE key=?').get(key); }
+  hasPostVersion(key: string): boolean { return !!this.db.prepare('SELECT 1 FROM post_versions WHERE key=?').get(key)
+    || !!this.db.prepare("SELECT 1 FROM retained_keys WHERE kind='post' AND id=?").get(key); }
   latestVersions(targetId: string, query: SourceQuery): readonly PostVersion[] { return this.latestPosts(targetId, query); }
   versions(targetId: string): readonly PostVersion[] { return this.rows('SELECT payload FROM post_versions WHERE target_id=? ORDER BY seq', targetId); }
   private latestPosts(targetId: string, query: SourceQuery): PostVersion[] {
@@ -277,6 +286,7 @@ export class SqliteStore implements WatchStore {
   ruleEvents(): readonly RuleEvent[] { return this.rows('SELECT payload FROM rule_events ORDER BY seq'); }
   createReportWithNotification(report: DigestReport, notification: Notification | null): boolean {
     return this.write(() => {
+      if (this.db.prepare("SELECT 1 FROM retained_keys WHERE kind='report' AND id=?").get(report.id)) return false;
       if (this.db.prepare('SELECT 1 FROM digest_reports WHERE id=?').get(report.id)) return false;
       if (report.id !== stableId('report', report.targetId, report.day, String(report.revision)) || !Number.isInteger(report.revision)
         || report.revision < 1 || !this.isCovered(report.targetId, report)) throw new Error('Invalid report identity or coverage.');
@@ -296,6 +306,7 @@ export class SqliteStore implements WatchStore {
   }
   reports(targetId: string): readonly DigestReport[] { return this.rows('SELECT payload FROM digest_reports WHERE target_id=? ORDER BY day,revision', targetId); }
   private enqueueRaw(notification: Notification): boolean {
+    if (this.db.prepare("SELECT 1 FROM retained_keys WHERE kind='notification' AND id=?").get(notification.id)) return false;
     return Number(this.db.prepare("INSERT INTO notifications(id,state,payload,result) VALUES(?,'pending',?,NULL) ON CONFLICT(id) DO NOTHING")
       .run(notification.id, pack(notification)).changes) === 1;
   }

@@ -6,7 +6,7 @@ import type { AuditRecord, RuntimeOwnership } from '../../../domain/model.js';
 import { requireRevision } from '../../../domain/policies/state.js';
 import { SystemClock } from '../../clock.js';
 import { transaction } from './transaction.js';
-export interface RuntimeLease extends RuntimeOwnership { readonly pid: number }
+export interface RuntimeLease extends RuntimeOwnership { readonly pid: number; readonly sessionId?: string }
 export interface ClaimsOptions {
   readonly clock?: Clock;
   readonly hostId?: string;
@@ -48,7 +48,7 @@ export class RuntimeClaims implements RuntimeLeaseControl {
     const acquired = transaction(this.db, () => {
       const row = this.row();
       if (row.revision !== before.revision || (row.lease !== null && !reclaimable)) return null;
-      const lease: RuntimeLease = { ownerId: this.ownerId, hostId: this.hostId, pid: this.pid,
+      const lease: RuntimeLease = { ownerId: this.ownerId, hostId: this.hostId, pid: this.pid, sessionId: randomUUID(),
         revision: row.revision + 1, acquiredAt: now, leaseUntil: new Date(Date.parse(now) + leaseMs).toISOString() };
       this.db.prepare('UPDATE runtime_ownership SET revision=?,payload=? WHERE singleton=1').run(lease.revision, JSON.stringify(lease));
       this.audit('acquire_runtime', lease.revision); return lease;

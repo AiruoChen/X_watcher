@@ -7,6 +7,7 @@ import type {
 export interface Clock { now(): Date; monotonicMs(): number }
 export interface PostSource {
   readonly capability: 'simulated' | 'real';
+  readonly budgeted?: boolean;
   resolve?(target: WatchTarget, signal?: AbortSignal): Promise<import('../model.js').ResolvedAuthor>;
   fetch(target: WatchTarget, cursor: string | null, query?: SourceQuery, signal?: AbortSignal): Promise<PostBatch>;
 }

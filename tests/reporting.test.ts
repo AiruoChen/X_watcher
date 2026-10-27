@@ -319,7 +319,7 @@ test('SQLite injected notification failure rolls back report, progress and outbo
     assert.equal(s.store.outbox().length, 0);
   } finally { s.close(); cleanupStorage(root); }
 });
-test('schema 5 migration retains legacy reports and unknown mail with a verified pre-schema-6 backup', () => {
+test('schema 5 migration retains legacy reports and unknown mail with a verified pre-upgrade backup', () => {
   const root = temporaryStorage(), path = join(root, 'v5-report.sqlite'); let store: SqliteStore | undefined;
   try {
     const raw = new DatabaseSync(path); migrate(raw, true, MIGRATIONS.slice(0, 5));
@@ -334,7 +334,7 @@ test('schema 5 migration retains legacy reports and unknown mail with a verified
     raw.close(); store = new SqliteStore(path);
     assert.deepEqual(store.reports(target.id)[0], old); assert.deepEqual(store.outbox()[0]!.notification, mail);
     assert.equal(store.deliveryRecord(mail.id)!.revision, 4); assert.equal(store.reportProgress(target.id, day), null);
-    const backup = readdirSync(root).find(p => p.includes('.pre-v6.') && p.endsWith('.sqlite'))!;
+    const backup = readdirSync(root).find(p => p.includes('.pre-v' + MIGRATIONS.length + '.') && p.endsWith('.sqlite'))!;
     const check = new DatabaseSync(join(root, backup), { readOnly: true });
     assert.equal(check.prepare('PRAGMA user_version').get()!['user_version'], 5);
     assert.equal(check.prepare('SELECT count(*) n FROM digest_reports').get()!['n'], 1); check.close();

@@ -50,7 +50,9 @@ export interface WorkflowStore {
   finishDelivery(attemptId: string, result: DeliveryResult, now: string): void;
   deliveryAttempts(): readonly DeliveryAttempt[];
 }
-export interface WatchStore extends LegacyWatchStore, WorkflowStore, MailStore, ReportingStore {}
+export interface WatchStore extends LegacyWatchStore, WorkflowStore, MailStore, ReportingStore {
+  readonly operations?: import('./operations.js').OperationsStore;
+}
 
 export interface ContentHasher { hash(text: string): string }
 

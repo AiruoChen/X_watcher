@@ -4,6 +4,7 @@ import type { Clock, ContentAnalyzer, ContentHasher, DigestRenderer, EventSink, 
 import { PollTarget } from './application/poll-target.js';
 import { DailyDigest } from './application/daily-digest.js';
 import { DeliverNotifications } from './application/deliver-notifications.js';
+import { limited } from './domain/policies/operations.js';
 import { Scheduler } from './runtime/scheduler.js';
 
 export interface Dependencies {
@@ -20,6 +21,7 @@ export interface Dependencies {
 /** Composition root: this is the only place that selects and connects implementations. */
 export function createApplication(config: RuntimeConfig, deps: Dependencies): Scheduler {
   validateDependencies(config, deps);
+  if (limited(config.budget)) throw new Error('Configured budgets require the persistent runtime; use watch or source:preview.');
   const digest = new DailyDigest(deps.store, deps.digestRenderer, config.recipient, deps.hasher, config.timeZone, config.revision);
   const delivery = new DeliverNotifications(deps.store, deps.notifications, deps.clock);
   const jobs: WatchJobs = {

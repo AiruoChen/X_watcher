@@ -1,6 +1,6 @@
 {
   "name": "x-watcher",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "private": true,
   "type": "module",
   "description": "Modular X monitoring agent: daily digests and reset alerts",
@@ -31,7 +31,23 @@
     "reporting:demo": "npm run build && node --experimental-sqlite dist/src/reporting-demo.js",
     "digest:status": "npm run build && node --experimental-sqlite --env-file-if-exists=.env dist/src/cli.js digest:status",
     "digest:preview": "npm run build && node --experimental-sqlite --env-file-if-exists=.env dist/src/cli.js digest:preview",
-    "digest:generate": "npm run build && node --experimental-sqlite --env-file-if-exists=.env dist/src/cli.js digest:generate"
+    "digest:generate": "npm run build && node --experimental-sqlite --env-file-if-exists=.env dist/src/cli.js digest:generate",
+    "operations:demo": "npm run build && node --experimental-sqlite dist/src/operations-demo.js",
+    "ops:status": "npm run build && node --experimental-sqlite --env-file-if-exists=.env dist/src/cli.js ops:status",
+    "ops:metrics": "npm run build && node --experimental-sqlite --env-file-if-exists=.env dist/src/cli.js ops:metrics",
+    "ops:usage": "npm run build && node --experimental-sqlite --env-file-if-exists=.env dist/src/cli.js ops:usage",
+    "ops:notifications": "npm run build && node --experimental-sqlite --env-file-if-exists=.env dist/src/cli.js ops:notifications",
+    "ops:check-now": "npm run build && node --experimental-sqlite --env-file-if-exists=.env dist/src/cli.js ops:check-now",
+    "ops:command": "npm run build && node --experimental-sqlite --env-file-if-exists=.env dist/src/cli.js ops:command",
+    "ops:stop": "npm run build && node --experimental-sqlite --env-file-if-exists=.env dist/src/cli.js ops:stop",
+    "ops:recover": "npm run build && node --experimental-sqlite --env-file-if-exists=.env dist/src/cli.js ops:recover",
+    "ops:resume": "npm run build && node --experimental-sqlite --env-file-if-exists=.env dist/src/cli.js ops:resume",
+    "ops:retry-analysis": "npm run build && node --experimental-sqlite --env-file-if-exists=.env dist/src/cli.js ops:retry-analysis",
+    "ops:backup": "npm run build && node --experimental-sqlite --env-file-if-exists=.env dist/src/cli.js ops:backup",
+    "ops:restore": "npm run build && node --experimental-sqlite --env-file-if-exists=.env dist/src/cli.js ops:restore",
+    "ops:export": "npm run build && node --experimental-sqlite --env-file-if-exists=.env dist/src/cli.js ops:export",
+    "ops:cleanup": "npm run build && node --experimental-sqlite --env-file-if-exists=.env dist/src/cli.js ops:cleanup",
+    "ops:analysis": "npm run build && node --experimental-sqlite --env-file-if-exists=.env dist/src/cli.js ops:analysis"
   },
   "devDependencies": {
     "@types/node": "22.20.5",

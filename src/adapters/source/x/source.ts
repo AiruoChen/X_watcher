@@ -11,6 +11,7 @@ const RETENTION_MARGIN_MS = 60_000;
 /** Complete means this fixed query exhausted the public Recent Search index, not all X content. */
 export class XSource implements PostSource {
   readonly capability = 'real';
+  get budgeted(): boolean { return this.client.budgeted; }
   private readonly bindings = new Map<string, ResolvedAuthor>();
   constructor(private readonly client: XClient, private readonly clock: Clock, private readonly config: RuntimeConfig['x']) {}
   async resolve(target: WatchTarget, signal?: AbortSignal): Promise<ResolvedAuthor> {

@@ -114,3 +114,11 @@ flowchart LR
 DueDigests 持久化最近 7 日之前的跳过区间，BuildReport 用查询覆盖与补查证明决定等待/摘录/完整状态；历史差异在下一次截止时刻生成父报告关联的 addendum。ReportTextRenderer 复用已保存分析，不新增 LLM 调用。报告事务重验输入 token 和 revision，固定全量版本/分析快照与正文哈希，再原子保存报告、进度和通知。
 
 SQLite schema 6 使用三个小表保留查询观察、等待/事故状态和策略边界，原报告表保留旧 JSON 合同。RSSHub 的未验证覆盖只能显式部分预览，真实模型/邮件和 live 仍未启用。验收和命令见 [REPORTING.md](REPORTING.md)。
+
+## B08 运维与预算（v0.9）
+
+OperationsStore 以独立端口挂在持久 WatchStore 上，BudgetController / ManageHealth 编排预算与事故；SqliteOperations 负责事务账本、脱敏汇总和控制命令，SqliteRetention 处理显式停机维护。CallGate / CallPermit 在外部调用前持久预留，邮件和分析在业务领取前取得许可，来源在 HTTP 边界逐请求计数。
+
+另一个 CLI 进程仅追加受限命令，原宿主在脉冲中消费，再使用同一任务 revision 与领取路径；停止请求绑定宿主会话。预算暂停有独立原因和期限，保留待办与计数，不变成来源永久失败。运行层只消费领域回调，业务和数据库仍在组合根注入。
+
+Schema 7 保存日汇总、调用许可、健康/事故、控制队列及 retained_keys。清理在有效备份之后重验预览指纹并保留引用图及最小去重键；归档正文不会变成零帖证明。ConsoleEvents 明确投影字段，历史导出是单独的敏感产物。操作与边界见 [OPERATIONS.md](OPERATIONS.md)。

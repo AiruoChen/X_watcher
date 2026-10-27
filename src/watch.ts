@@ -7,6 +7,7 @@ import { FixtureAnalyzer } from './adapters/analysis/fixture-analyzer.js';
 import { PreviewChannel } from './adapters/notification/preview-channel.js';
 import { TextDigestRenderer } from './application/digest-renderer.js';
 import { ResetRule } from './application/rules/reset-rule.js';
+import { ConsoleEvents } from './adapters/observability/console-events.js';
 import { createRuntimeApplication } from './bootstrap-runtime.js';
 
 /** Foreground, persistent, simulated host. No real X, model or email adapters are selected here. */
@@ -19,7 +20,7 @@ export async function watch(config: RuntimeConfig, create: boolean): Promise<num
   try {
     const { host } = createRuntimeApplication(config, { store, clock, hasher: new Sha256Hasher(),
       sources: new Map([['x', new FixtureSource([])]]), analyzer: new FixtureAnalyzer(new Map()), notifications: new PreviewChannel(),
-      rules: [new ResetRule()], digestRenderer: new TextDigestRenderer(), events: { record: event => console.log(JSON.stringify(event)) },
+      rules: [new ResetRule()], digestRenderer: new TextDigestRenderer(), events: new ConsoleEvents(),
       lease: store.runtime, state: store.schedules, reconcile: revision => store.recoverAbandonedWork(revision) });
     const stop = (): void => host.stop();
     process.on('SIGINT', stop); process.on('SIGTERM', stop);

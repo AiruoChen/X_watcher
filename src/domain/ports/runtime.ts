@@ -23,6 +23,7 @@ export interface RuntimeJobs {
   digestWindows(target: WatchTarget): readonly DigestWindow[];
   /** Necessary daily source check, merged into the existing ingestion task. */
   reportCheckAt?(target: WatchTarget): string | null;
+  beforePulse?(): { readonly stop: boolean };
 }
 export interface RuntimeRecovery { recover(expectedRevision: number): void }
 export interface Waiter { wait(ms: number, signal: AbortSignal): Promise<void> }

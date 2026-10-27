@@ -1,4 +1,4 @@
-import type { Clock, ContentHasher, ExecutionContext, PostSource, WatchStore } from '../domain/ports.js';
+import type { CallGate, Clock, ContentHasher, ExecutionContext, PostSource, WatchStore } from '../domain/ports.js';
 import type { AnalysisJob, PostVersion, RuntimeConfig, WatchTarget } from '../domain/model.js';
 import { stableId } from '../domain/identifiers.js';
 import { IncompleteBatchError, SourceCoverageGap } from '../domain/errors.js';
@@ -8,7 +8,7 @@ import { digestWindowForDay, dueDigestWindow, isInstant, shiftDay } from '../dom
 
 export class IngestTarget {
   constructor(private readonly source: PostSource, private readonly store: WatchStore,
-    private readonly clock: Clock, private readonly config: RuntimeConfig, private readonly hasher: ContentHasher) {}
+    private readonly clock: Clock, private readonly config: RuntimeConfig, private readonly hasher: ContentHasher, private readonly calls?: CallGate) {}
   async execute(target: WatchTarget, context?: ExecutionContext, recheckFrom?: string): Promise<number> {
     if (recheckFrom && !isInstant(recheckFrom)) throw new Error('Invalid report recheck boundary.');
     context?.signal.throwIfAborted();
@@ -33,8 +33,9 @@ export class IngestTarget {
     const cursor = recheckFrom ? null : checkpoint.cursor;
     let batch;
     try {
-      batch = context ? await context.call(signal => this.source.fetch(target, cursor, query, signal), this.config.services.source.timeoutMs)
-        : await this.source.fetch(target, cursor, query);
+      const permit = this.source.capability === 'simulated' ? this.calls?.reserve('source') : undefined;
+      const fetch = (signal?: AbortSignal) => permit ? permit.run(() => this.source.fetch(target, cursor, query, signal)) : this.source.fetch(target, cursor, query, signal);
+      batch = context ? await context.call(fetch, this.config.services.source.timeoutMs) : await fetch();
     } catch (error) {
       if (error instanceof SourceCoverageGap) this.store.recordCoverageGap({ ...error.range,
         id: stableId('gap', target.id, error.range.from, error.range.to, error.code), targetId: target.id, status: 'gap', reason: error.code,

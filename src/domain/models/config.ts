@@ -18,7 +18,11 @@ export interface RuntimeConfig {
   };
   readonly analysisPolicy: { readonly allowPartial: boolean };
   readonly mailPolicy: { readonly account: string | null; readonly idempotencyTtlMs: number; readonly maxAttempts: number };
-  readonly budget: { readonly maxCallsPerDay: number | null; readonly maxCostPerDay: number | null };
+  readonly budget: { readonly maxCallsPerDay: number | null; readonly maxCostPerDay: number | null; readonly maxCostMicros: number | null;
+    readonly serviceCalls: Readonly<Record<import('./operations.js').MeteredService, number | null>>;
+    readonly unitMicros: Readonly<Record<import('./operations.js').MeteredService, number | null>>;
+    readonly currency: string | null; readonly priceReference: string | null };
+  readonly operations: { readonly retentionTermsReviewed: boolean; readonly autoCleanup: boolean };
   readonly mode: 'demo' | 'preview' | 'live';
   readonly targets: readonly WatchTarget[];
   readonly pollIntervalMs: number;

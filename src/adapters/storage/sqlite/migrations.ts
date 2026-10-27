@@ -43,6 +43,18 @@ CREATE INDEX notification_retry_due ON notifications(state,next_delivery_ms);
 CREATE TABLE source_observations(target_id TEXT PRIMARY KEY REFERENCES targets(id), payload TEXT NOT NULL CHECK(json_valid(payload))) STRICT;
 CREATE TABLE report_progress(target_id TEXT NOT NULL REFERENCES targets(id), day TEXT NOT NULL, revision INTEGER NOT NULL CHECK(revision>=1), payload TEXT NOT NULL CHECK(json_valid(payload)), PRIMARY KEY(target_id,day)) STRICT;
 CREATE TABLE report_boundaries(target_id TEXT PRIMARY KEY REFERENCES targets(id), payload TEXT NOT NULL CHECK(json_valid(payload))) STRICT;
+` }, { version: 7, sql: `
+CREATE TABLE budget_clock(singleton INTEGER PRIMARY KEY CHECK(singleton=1), day TEXT NOT NULL) STRICT;
+INSERT INTO budget_clock VALUES(1,'0000-01-01');
+CREATE TABLE usage_daily(day TEXT NOT NULL,service TEXT NOT NULL,currency TEXT,calls INTEGER NOT NULL CHECK(calls>=0),known_micros INTEGER NOT NULL CHECK(known_micros>=0),unpriced_calls INTEGER NOT NULL CHECK(unpriced_calls>=0),input_tokens INTEGER NOT NULL,output_tokens INTEGER NOT NULL,measured_calls INTEGER NOT NULL,PRIMARY KEY(day,service)) STRICT;
+CREATE TABLE usage_ledger(id TEXT PRIMARY KEY,day TEXT NOT NULL,service TEXT NOT NULL,payload TEXT NOT NULL CHECK(json_valid(payload))) STRICT;
+CREATE INDEX usage_ledger_day ON usage_ledger(day);
+CREATE TABLE operation_health(id TEXT PRIMARY KEY,payload TEXT NOT NULL CHECK(json_valid(payload))) STRICT;
+CREATE TABLE operation_incidents(id TEXT PRIMARY KEY,payload TEXT NOT NULL CHECK(json_valid(payload))) STRICT;
+CREATE TABLE operation_commands(id TEXT PRIMARY KEY,state TEXT NOT NULL CHECK(state IN ('pending','applied','rejected')),code TEXT NOT NULL,payload TEXT NOT NULL CHECK(json_valid(payload)),owner_id TEXT,created_at TEXT NOT NULL) STRICT;
+CREATE INDEX operation_commands_pending ON operation_commands(state);
+CREATE TABLE retained_keys(kind TEXT NOT NULL,id TEXT NOT NULL,target_id TEXT,payload TEXT NOT NULL CHECK(json_valid(payload)),PRIMARY KEY(kind,id)) STRICT;
+CREATE INDEX retained_post_identity ON retained_keys(kind,target_id,json_extract(payload,'$.postId'));
 ` }];
 export const SCHEMA_VERSION = MIGRATIONS.length;
 const checksum = (sql: string): string => createHash('sha256').update(sql).digest('hex');

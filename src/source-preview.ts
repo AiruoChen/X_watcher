@@ -1,5 +1,9 @@
 import type { RuntimeConfig } from './domain/model.js';
-import { SourceFailure } from './domain/errors.js';
+import { BudgetExceeded, SourceFailure } from './domain/errors.js';
+import { randomUUID } from 'node:crypto';
+import { BudgetController } from './application/budget.js';
+import { limited } from './domain/policies/operations.js';
+import { ConsoleEvents } from './adapters/observability/console-events.js';
 import { SystemClock } from './adapters/clock.js';
 import { DeadlineContext, TimerWaiter } from './adapters/execution.js';
 import { SqliteStore } from './adapters/storage/sqlite/store.js';
@@ -14,7 +18,10 @@ import { createReadonlySource } from './bootstrap-source.js';
 export async function probeSource(config: RuntimeConfig, env: NodeJS.ProcessEnv): Promise<number> {
   const clock = new SystemClock();
   // At most one search page per target; failure cannot be mistaken for a completed query.
-  const { source, client } = createReadonlySource({ ...config, x: { ...config.x, maxPages: 1, pageSize: 10 } }, env, clock);
+  createReadonlySource(config,env,clock);
+  const accounting = limited(config.budget) ? new SqliteStore(config.storage.path,{claims:{clock}}) : undefined;
+  const calls = accounting ? new BudgetController(accounting.operations,clock,config,randomUUID) : undefined;
+  const { source, client } = createReadonlySource({ ...config, x: { ...config.x, maxPages: 1, pageSize: 10 } }, env, clock,undefined,calls);
   console.log(config.services.source.provider === 'rsshub'
     ? 'Self-hosted RSSHub snapshot probe; coverage unverified. No database, model or mail operations.'
     : 'Real X API read: charges may apply. Probe only; no database, model or mail operations.');
@@ -28,23 +35,26 @@ export async function probeSource(config: RuntimeConfig, env: NodeJS.ProcessEnv)
         const result = await new ProbeSource(source, clock, config).execute(target, new DeadlineContext(cancellation.signal));
         console.log(JSON.stringify(result)); if (result['status'] !== 'ok') failed = true;
       }
-      catch (error) { failed = true; console.log(JSON.stringify({ targetId: target.id, status: 'failed', code: error instanceof SourceFailure ? error.code : 'source_failed' })); }
+      catch (error) { failed = true; console.log(JSON.stringify({ targetId: target.id, status: 'failed', code: error instanceof BudgetExceeded ? 'budget_exhausted' : error instanceof SourceFailure ? error.code : 'source_failed' })); }
     }
-    console.log(JSON.stringify({ requests: client.requestCount, mail: 'disabled', model: 'deferred' }));
+    console.log(JSON.stringify({ requests: client.requestCount, accounting:accounting?'persistent':'diagnostic_only', mail: 'disabled', model: 'deferred' }));
     return failed ? 1 : 0;
-  } finally { process.off('SIGINT', stop); process.off('SIGTERM', stop); }
+  } finally { process.off('SIGINT', stop); process.off('SIGTERM', stop); accounting?.close(); }
 }
 
 export async function previewSource(config: RuntimeConfig, env: NodeJS.ProcessEnv, create: boolean, once: boolean): Promise<number> {
-  const clock = new SystemClock(), { source, client } = createReadonlySource(config, env, clock);
+  const clock = new SystemClock();
+  createReadonlySource(config, env, clock); // Validate provider/credential format before opening or creating data.
   let store: SqliteStore;
   try { store = new SqliteStore(config.storage.path, { create, claims: { clock } }); }
   catch { throw new Error('Cannot open preview database; create a separate new preview database explicitly with --create.'); }
   try {
+    const calls = new BudgetController(store.operations,clock,config,randomUUID);
+    const { source, client } = createReadonlySource(config,env,clock,undefined,calls);
     const waiter = new TimerWaiter(); let stop = (): void => undefined;
-    const { host } = createRuntimeApplication(config, { store, clock, hasher: new Sha256Hasher(), sources: new Map(config.targets.map(target => [target.provider, source])),
+    const { host } = createRuntimeApplication(config, { store, clock, calls, hasher: new Sha256Hasher(), sources: new Map(config.targets.map(target => [target.provider, source])),
       analyzer: new FixtureAnalyzer(new Map()), notifications: new PreviewChannel(), rules: [], digestRenderer: new TextDigestRenderer(),
-      events: { record: event => console.log(JSON.stringify(event)) }, lease: store.runtime, state: store.schedules,
+      events: new ConsoleEvents(), lease: store.runtime, state: store.schedules,
       reconcile: revision => store.recoverAbandonedWork(revision),
       waiter: { wait: async (ms, signal) => {
         await waiter.wait(ms, signal);

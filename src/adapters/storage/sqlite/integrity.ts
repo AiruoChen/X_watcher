@@ -35,5 +35,11 @@ export function inspectDatabase(db: DatabaseSync): number {
   if (version >= 6) {
     for (const table of ['source_observations','report_progress','report_boundaries']) db.prepare(`SELECT payload FROM ${table} LIMIT 0`).all();
   }
+  if (version >= 7) {
+    for (const table of ['usage_ledger','operation_health','operation_incidents','operation_commands','retained_keys']) db.prepare('SELECT payload FROM ' + table + ' LIMIT 0').all();
+    db.prepare('SELECT currency,calls,known_micros,unpriced_calls,input_tokens,output_tokens,measured_calls FROM usage_daily LIMIT 0').all();
+    if (!db.prepare('SELECT day FROM budget_clock WHERE singleton=1').get()) throw new Error('Missing budget clock.');
+    for (const index of ['usage_ledger_day','operation_commands_pending','retained_post_identity']) if (!db.prepare("SELECT 1 FROM sqlite_master WHERE type='index' AND name=?").get(index)) throw new Error('Missing operations index.');
+  }
   return version;
 }

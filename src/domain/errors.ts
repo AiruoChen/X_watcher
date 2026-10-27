@@ -16,3 +16,11 @@ export class SourceFailure extends Error {
 export class SourceCoverageGap extends SourceFailure {
   constructor(readonly range: import('./model.js').SourceQuery) { super('coverage_gap', false); }
 }
+
+export class BudgetExceeded extends Error {
+  constructor(readonly service: import('./model.js').MeteredService, readonly retryAt: string, readonly reason: string) { super('budget_exhausted'); }
+}
+
+export class UsageFailure extends Error {
+  constructor(readonly usage: import('./model.js').TokenUsage) { super('Model response was not usable; measured usage was retained.'); }
+}
