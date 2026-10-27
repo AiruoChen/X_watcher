@@ -24,14 +24,13 @@ export class IngestTarget {
     const batch = await this.source.fetch(target, checkpoint.cursor, query);
     if (!batch.complete) throw new IncompleteBatchError();
     const posts = new Map<string, PostVersion>(), jobs = new Map<string, AnalysisJob>();
-    const oldKeys = new Set(this.store.versions(target.id).map(p => p.key));
     for (const post of batch.posts) {
       validatePost(post, target);
       if (Date.parse(post.publishedAt) < Date.parse(query.from) || Date.parse(post.publishedAt) >= Date.parse(query.to))
         throw new Error('Source returned a post outside the requested interval.');
       const hash = this.hasher.hash(JSON.stringify([post.text, post.publishedAt, post.url]));
       const key = stableId('post', target.provider, identity.authorId, post.id, hash);
-      if (oldKeys.has(key) || posts.has(key)) continue;
+      if (this.store.hasPostVersion(key) || posts.has(key)) continue;
       posts.set(key, { ...post, key, provider: target.provider, authorId: identity.authorId, sourceVersion: hash,
         contentHash: hash, discoveredAt: now, completeness: 'full', deleted: false });
       const version = this.config.services.analysis.version, prompt = this.config.services.analysis.promptVersion;

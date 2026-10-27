@@ -20,7 +20,7 @@ const sample: Post = { id: 'p', targetId: target.id, text: 'Limits reset tomorro
 const answer = { summary: 'Reset announcement', chatgptUpdates: [],
   reset: { evidence: sample.text, whenText: 'tomorrow', timeZoneText: null } };
 const window = { day: '2026-01-01', from: '2025-12-31T16:00:00.000Z', to: '2026-01-01T16:00:00.000Z' };
-async function seeded(create: () => WatchStore) {
+export async function seeded(create: () => WatchStore) {
   const store = create(), clock = new ManualClock(new Date('2026-01-02T00:00:00Z')), hasher = new Sha256Hasher();
   store.registerTarget({ ...target, authorId: `fixture:${target.handle.toLowerCase()}`, enabled: true,
     monitorStartedAt: '2026-01-01T00:00:00Z', configRevision: config.revision });
@@ -147,3 +147,5 @@ export function watchStoreContract(name: string, create: () => WatchStore): void
     assert.equal(store.listPosts(target.id, window).length, 1);
   });
 }
+
+export const contractFixture = { config, target, sample, answer, window };

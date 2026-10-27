@@ -8,10 +8,7 @@ export class DailyDigest {
     private readonly timeZone: string, private readonly configRevision: string) {}
   execute(target: WatchTarget, window: DigestWindow, now: string): boolean {
     if (!this.store.isCovered(target.id, window)) return false;
-    const latest = new Map<string, typeof versions[number]>();
-    const versions = this.store.versions(target.id);
-    for (const post of versions) latest.set(post.id, post);
-    const source = [...latest.values()].filter(p => !p.deleted && Date.parse(p.publishedAt) >= Date.parse(window.from) && Date.parse(p.publishedAt) < Date.parse(window.to));
+    const source = this.store.latestVersions(target.id, window).filter(p => !p.deleted);
     if (source.some(p => !this.store.analysisResult(p.key))) return false;
     const id = stableId('report', target.id, window.day, '1');
     const posts = this.store.listPosts(target.id, window);

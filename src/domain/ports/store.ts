@@ -19,12 +19,17 @@ export interface AnalysisCommit {
 }
 /** Synchronous transaction contracts; clone inputs/outputs and reject inconsistent identities. */
 export interface WorkflowStore {
+  pendingNotifications(limit: number): readonly import('../model.js').OutboxEntry[];
+  pendingAnalysisJobs(targetId: string, now: string, limit: number): readonly AnalysisJob[];
   registerTarget(target: TargetIdentity): TargetIdentity;
   target(id: string): TargetIdentity | null;
   commitIngestion(commit: IngestionCommit): void;
   recordCoverageGap(gap: Coverage, expectedRevision: number): void;
   coverage(targetId: string): readonly Coverage[];
   isCovered(targetId: string, query: SourceQuery): boolean;
+  postVersion(key: string): PostVersion | null;
+  hasPostVersion(key: string): boolean;
+  latestVersions(targetId: string, query: SourceQuery): readonly PostVersion[];
   versions(targetId: string): readonly PostVersion[];
   analysisJobs(targetId: string): readonly AnalysisJob[];
   claimAnalysis(id: string, now: string): AnalysisJob | null;
@@ -42,3 +47,10 @@ export interface WorkflowStore {
 export interface WatchStore extends LegacyWatchStore, WorkflowStore {}
 
 export interface ContentHasher { hash(text: string): string }
+
+export interface RuntimeLeaseControl {
+  current(): import('../model.js').RuntimeOwnership | null;
+  acquire(leaseMs: number): import('../model.js').RuntimeOwnership | null;
+  renew(expectedRevision: number, leaseMs: number): import('../model.js').RuntimeOwnership;
+  release(expectedRevision: number): void;
+}

@@ -10,11 +10,11 @@ export class ProcessAnalysis {
     private readonly rules: readonly NotificationRule[], private readonly clock: Clock, private readonly config: RuntimeConfig) {}
   async execute(target: WatchTarget): Promise<void> {
     let failed = false;
-    for (const candidate of this.store.analysisJobs(target.id)) {
+    for (const candidate of this.store.pendingAnalysisJobs(target.id, this.clock.now().toISOString(), 100)) {
       const job = this.store.claimAnalysis(candidate.id, this.clock.now().toISOString());
       if (!job) continue;
       try {
-        const post = this.store.versions(target.id).find(p => p.key === job.postKey)!;
+        const post = this.store.postVersion(job.postKey)!;
         const analysis = await this.analyzer.analyze(post);
         validateAnalysis(post, analysis);
         const now = this.clock.now().toISOString();
