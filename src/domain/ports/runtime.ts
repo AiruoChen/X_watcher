@@ -21,6 +21,8 @@ export interface RuntimeJobs {
   deliver(context: ExecutionContext): Promise<void>;
   digest(target: WatchTarget, window: DigestWindow): boolean;
   digestWindows(target: WatchTarget): readonly DigestWindow[];
+  /** Necessary daily source check, merged into the existing ingestion task. */
+  reportCheckAt?(target: WatchTarget): string | null;
 }
 export interface RuntimeRecovery { recover(expectedRevision: number): void }
 export interface Waiter { wait(ms: number, signal: AbortSignal): Promise<void> }

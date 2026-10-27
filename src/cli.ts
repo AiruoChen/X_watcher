@@ -7,6 +7,10 @@ try {
   if (command === 'demo') await runDemo();
   else if (command === 'config') console.log(JSON.stringify(describeConfig(loadConfig(process.env)), null, 2));
   else if (command === 'run') await runDemo(loadConfig(process.env));
+  else if (['digest:status', 'digest:preview', 'digest:generate'].includes(command)) {
+    const { digestOperations } = await import('./digest-operations.js');
+    digestOperations(loadLocalConfig(process.env), command, process.argv.slice(3));
+  }
   else if (command === 'mail:status' || command === 'mail:resolve') {
     const { mailOperations } = await import('./mail-operations.js');
     mailOperations(loadLocalConfig(process.env), command, process.argv.slice(3));
@@ -25,7 +29,7 @@ try {
     process.exitCode = probe ? await probeSource(config, process.env)
       : await previewSource(config, process.env, args.includes('--create'), args.includes('--once'));
   }
-  else throw new Error('Usage: npm run demo | npm start | npm run config:check | npm run watch -- [--create] | npm run source:probe | npm run source:preview -- [--create] [--once]');
+  else throw new Error('Usage: npm run demo | npm start | npm run config:check | npm run watch -- [--create] | npm run source:probe | npm run source:preview -- [--create] [--once] | npm run digest:status -- <day> | npm run digest:preview -- <day> [--partial] | npm run digest:generate -- <day>');
 } catch (error) {
   console.error(error instanceof Error ? error.message : 'Application failed.');
   process.exitCode = 1;

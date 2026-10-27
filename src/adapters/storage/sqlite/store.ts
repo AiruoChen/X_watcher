@@ -1,4 +1,8 @@
+import { createHash } from 'node:crypto';
 import type { SQLInputValue } from 'node:sqlite';
+import type { ReportBoundary, ReportCommit, ReportInputs, ReportItem, ReportProgress, ReportSnapshot, SourceObservation } from '../../../domain/model.js';
+import { buildReportInputs, validateObservation } from '../../../domain/policies/report-inputs.js';
+import { validBoundary, validateReportCommit } from '../../../domain/policies/reporting.js';
 import type { DeliveryBinding, DeliveryRecord, DeliveryResolution, MailAudit } from '../../../domain/model.js';
 import { deliveryOutcome } from '../../../domain/policies/mail-retry.js';
 import { resolvedDeliveryState, validateBinding } from '../../../domain/policies/mail.js';
@@ -33,6 +37,53 @@ export class SqliteStore implements WatchStore {
     catch (error) { this.db.close(); throw error; }
   }
   close(): void { this.db.close(); }
+  reportProgress(targetId: string, day: string): ReportProgress | null {
+    return this.one('SELECT payload FROM report_progress WHERE target_id=? AND day=?', targetId, day);
+  }
+  reportBoundary(targetId: string): ReportBoundary | null { return this.one('SELECT payload FROM report_boundaries WHERE target_id=?', targetId); }
+  recordReportBoundary(boundary: ReportBoundary): void {
+    this.write(() => {
+      if (!this.target(boundary.targetId)) throw new Error('Unknown report target.');
+      validBoundary(boundary, this.reportBoundary(boundary.targetId));
+      this.db.prepare('INSERT INTO report_boundaries(target_id,payload) VALUES(?,?) ON CONFLICT(target_id) DO UPDATE SET payload=excluded.payload')
+        .run(boundary.targetId, pack(boundary));
+    });
+  }
+  private reportInputsRaw(targetId: string, window: DigestWindow): ReportInputs {
+    if (!this.target(targetId)) throw new Error('Unknown report target.');
+    const previous = this.one<DigestReport>('SELECT payload FROM digest_reports WHERE target_id=? AND day=? ORDER BY revision DESC LIMIT 1', targetId, window.day);
+    const previousItems: readonly ReportItem[] = (previous as Partial<ReportSnapshot> | null)?.items ?? (previous?.postKeys.map(k => {
+      const post = this.postVersion(k); if (!post) throw new Error('Missing old report source.');
+      return { post, result: this.analysisResults(k).filter(r => Date.parse(r.completedAt) <= Date.parse(previous.createdAt)).at(-1) ?? null };
+    }) ?? []);
+    return buildReportInputs({ targetId, window, checkpoint: this.checkpoint(targetId),
+      observation: this.one<SourceObservation>('SELECT payload FROM source_observations WHERE target_id=?', targetId),
+      boundary: this.reportBoundary(targetId), coverage: this.coverage(targetId), progress: this.reportProgress(targetId, window.day),
+      previous, previousItems, items: [...this.latestVersions(targetId, window)].sort((a, b) => a.id.localeCompare(b.id))
+        .map(post => ({ post, result: this.analysisResult(post.key) })) });
+  }
+  reportInputs(targetId: string, window: DigestWindow): ReportInputs {
+    this.db.exec('BEGIN');
+    try { const input = this.reportInputsRaw(targetId, window); this.db.exec('COMMIT'); return input; }
+    catch (error) { this.db.exec('ROLLBACK'); throw error; }
+  }
+  commitReport(command: ReportCommit): boolean {
+    return this.write(() => {
+      const current = this.reportInputsRaw(command.inputs.targetId, command.inputs.window); validateReportCommit(current, command);
+      if (command.snapshot && createHash('sha256').update(command.snapshot.text).digest('hex') !== command.snapshot.contentHash) throw new Error('Report hash mismatch.');
+      const snapshot = command.snapshot, progress = command.progress;
+      if (snapshot) this.db.prepare('INSERT INTO digest_reports(id,target_id,day,revision,payload) VALUES(?,?,?,?,?)')
+        .run(snapshot.id, snapshot.targetId, snapshot.day, snapshot.revision, pack(snapshot));
+      this.db.prepare('INSERT INTO report_progress(target_id,day,revision,payload) VALUES(?,?,?,?) ON CONFLICT(target_id,day) DO UPDATE SET revision=excluded.revision,payload=excluded.payload')
+        .run(progress.targetId, progress.day, progress.revision, pack(progress));
+      for (const n of command.notifications) {
+        const old = this.one<Notification>('SELECT payload FROM notifications WHERE id=?', n.id);
+        if (old && pack(old) !== pack(n)) throw new Error('Report notification collision.');
+        this.enqueueRaw(n);
+      }
+      return command.notifications.length > 0;
+    });
+  }
   backup(destination: string): BackupManifest { return backupDatabase(this.db, destination); }
   private one<T>(sql: string, ...args: SQLInputValue[]): T | null {
     const row = this.db.prepare(sql).get(...args); return row ? JSON.parse(String(row['payload'])) as T : null;
@@ -74,6 +125,7 @@ export class SqliteStore implements WatchStore {
       .run(coverage.id, coverage.targetId, Date.parse(coverage.from), Date.parse(coverage.to), coverage.status, pack(coverage));
   }
   commitIngestion(commit: IngestionCommit): void {
+    validateObservation(commit.observation);
     this.write(() => {
       const checkpoint = this.checkpoint(commit.targetId), target = this.target(commit.targetId), range = commit.coverage;
       requireRevision(checkpoint.revision, commit.expectedRevision);
@@ -103,6 +155,8 @@ export class SqliteStore implements WatchStore {
       const updated = this.db.prepare('UPDATE checkpoints SET revision=revision+1,cursor=?,observed_at=? WHERE target_id=? AND revision=?')
         .run(commit.cursor, commit.observedAt, target.id, commit.expectedRevision);
       if (Number(updated.changes) !== 1) throw new RevisionConflictError();
+      if (commit.observation) this.db.prepare('INSERT INTO source_observations(target_id,payload) VALUES(?,?) ON CONFLICT(target_id) DO UPDATE SET payload=excluded.payload')
+        .run(target.id, pack({ ...commit.observation, checkpointRevision: commit.expectedRevision + 1 }));
     });
   }
   recordCoverageGap(gap: Coverage, expectedRevision: number): void {

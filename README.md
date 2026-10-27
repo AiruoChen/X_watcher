@@ -2,7 +2,9 @@
 
 一个可扩展的 X 推文监测 agent 框架。首个场景是关注 `@thsottiaux`：每半小时读取新推文，发现重置相关信息后提醒，并在北京时间每天 **08:00** 整理前一天的内容与其中提到的 ChatGPT 更新。
 
-> **当前 v0.7.1 已完成 B05/B06 可配置接口和离线验证，并修复需求审查问题。** 包含结构化分析、重置证据/时间规则、邮件尝试、只读核对、人工处理及 SQLite schema 5；支持明确中英文日期转换、可信旧版本关联、确定公告分项评估和明确未接收时的自动退避重试。按你的选择，暂不指定模型或邮件服务商，不进行真实分析或发信。运行 `npm run modules:demo` 查看完整离线流程；接口见 [分析模块](docs/integrations/analysis.md) 和 [邮件模块](docs/integrations/mail.md)。
+> **当前 v0.8 已完成 B07 日报/补报业务代码与离线验证。** 新增 08:00 同任务补查、08:15 等待/原文降级、故障与恢复通知、最近 7 日补报及历史更正快照；SQLite schema 6 保留旧数据并自动备份迁移。272 项离线测试通过，新增 `digest:status`、`digest:preview`、`digest:generate` 和 `reporting:demo`。详见 [日报模块](docs/REPORTING.md)。
+
+> B05/B06 保留可配置分析、邮件与核对接口。按你的选择，暂不指定服务商；真实模型、邮件和 RSSHub 实例仍待联调，不发送真实邮件，`live` 继续拒绝启动。RSSHub 只支持明确标注可能遗漏的部分预览。
 
 > **v0.6 已新增自托管 RSSHub 来源。** 推荐入口为 `rsshub:probe` / `rsshub:preview`；它读取有限 JSON Feed 快照并保存到 SQLite，不调用本项目的官方 X API。模型/邮件的真实客户端尚未接入；当前不会发送摘要或提醒。Docker 与真实 Cookie 联调尚未执行，配置与部署见 [RSSHub 指南](docs/integrations/rsshub.md)。
 
@@ -12,7 +14,7 @@
 
 目标产品的完整规则见 [需求文档](docs/REQUIREMENTS.md)，后续实现见 [分块开发计划](docs/DEVELOPMENT_PLAN.md)。两份文档描述未来生产能力；当前提供模拟演示及显式真实只读入口，尚未形成分析/发信闭环。
 
-开发主线：**领域合同 → SQLite → 可恢复运行 → 真实 X → 分析/重置 → 邮件/核对 → 日报/补报 → 运维/预算 → 部署验收**。B05/B06 通用接口已完成，服务商接入与真实验收待后续确定；下一业务块为 B07 日报/补报。RSSHub 的真实核验需先启动自托管实例并配置登录 Cookie；官方 API 方案的 Token 联调仍可独立进行。
+开发主线：**领域合同 → SQLite → 可恢复运行 → 真实 X → 分析/重置 → 邮件/核对 → 日报/补报 → 运维/预算 → 部署验收**。B05/B06 通用接口和 B07 日报业务已通过离线验证；后续为 B08 运维/预算，以及服务商接入和受控真实验收。RSSHub 的真实核验需先启动自托管实例并配置登录 Cookie；官方 API 方案的 Token 联调仍可独立进行。
 
 ## 快速开始
 
@@ -26,6 +28,7 @@ npm run demo
 npm run config:check
 npm run storage:demo
 npm run runtime:demo
+npm run reporting:demo
 ```
 
 演示使用固定时钟、虚构历史/新推文、内存存储及邮件预览，运行两次 tick 验证同一进程中不会重复通知。没有网络请求，不需要 API 密钥。
@@ -67,7 +70,7 @@ npm run rsshub:preview -- --create --once
 npm run rsshub:preview
 ```
 
-Cookie 只在 RSSHub 中使用，应用不读取或转发它。RSSHub 缓存/限流可能增加发现延迟；订阅只保留有限条目，无法保证历史无遗漏。抓取结果以未验证覆盖保存，不伪装成完整日报。正文完整性未知的作业保留待办，B05 已提供显式部分正文分析策略；B07 仍需实现降级日报。详细修改点、凭据位置和排障见 [RSSHub 接入与迁移](docs/integrations/rsshub.md)。
+Cookie 只在 RSSHub 中使用，应用不读取或转发它。RSSHub 缓存/限流可能增加发现延迟；订阅只保留有限条目，无法保证历史无遗漏。抓取结果以未验证覆盖保存，不伪装成完整日报。正文完整性未知的作业保留待办，B05 已提供显式部分正文分析策略；B07 已提供 `npm run digest:preview -- YYYY-MM-DD --partial`，仅展示已收集内容，不自动发送部分来源报告。详细修改点、凭据位置和排障见 [RSSHub 接入与迁移](docs/integrations/rsshub.md)。
 
 ## 官方 X 只读入口（可选）
 

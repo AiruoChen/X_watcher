@@ -106,7 +106,7 @@ test('schema v4 upgrades losslessly with verified backup; unknown and unbound le
     db.close(); store = new SqliteStore(path);
     assert.deepEqual(store.outbox()[0]!.notification, notification); assert.equal(store.deliveryRecord(notification.id)!.revision, 7);
     assert.equal(store.pendingNotifications(10, '2030-01-01T00:00:00Z').length, 0);
-    const backup = readdirSync(root).find(p => p.includes('.pre-v5.') && p.endsWith('.sqlite'))!;
+    const backup = readdirSync(root).find(p => p.includes('.pre-v' + MIGRATIONS.length + '.') && p.endsWith('.sqlite'))!;
     const raw = new DatabaseSync(join(root, backup), { readOnly: true }); assert.equal(raw.prepare('PRAGMA user_version').get()!['user_version'], 4); raw.close();
     store.enqueue({ ...notification, id: 'legacy' }); const claim = store.claimDelivery('legacy', now)!;
     store.finishDelivery(claim.attemptId, { status: 'rejected', reason: 'synthetic proof', retry: { notBefore: null } }, now);

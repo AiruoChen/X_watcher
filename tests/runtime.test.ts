@@ -123,7 +123,7 @@ test('multi-day restart catches up complete windows oldest first within configur
     s.clock.advance(4 * 86_400_000);
     const { scheduler } = s.app(); s.store.runtime.acquire(60_000); scheduler.initialize();
     for (let i = 0; i < 5; i++) { scheduler.pulse(s.context); await scheduler.drain(); s.clock.advance(1000); }
-    assert.deepEqual(s.store.reports(f.target.id).map(r => r.day), ['2026-01-01','2026-01-02','2026-01-03','2026-01-04','2026-01-05']);
+    assert.deepEqual(s.store.reports(f.target.id).map(r => r.day), ['2025-12-31','2026-01-01','2026-01-02','2026-01-03','2026-01-04','2026-01-05']);
     assert.ok(s.store.reports(f.target.id).every(r => r.state === 'empty')); assert.equal(s.preview.list().length, 0);
   } finally { s.close(); }
 });
