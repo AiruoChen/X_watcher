@@ -10,6 +10,9 @@ export interface PostBatch {
   readonly nextCursor: string | null;
   /** False means pagination or retrieval is incomplete; never advance the checkpoint. */
   readonly complete: boolean;
+  /** Optional earlier start for explicit overlap; end must equal the fixed requested boundary. */
+  readonly coverage?: SourceQuery;
+  readonly scope?: 'x_recent_public_index';
 }
 
 export interface SourceQuery { readonly from: string; readonly to: string }
@@ -18,4 +21,5 @@ export interface Coverage extends SourceQuery {
   readonly targetId: string;
   readonly status: 'complete' | 'gap';
   readonly reason: string | null;
+  readonly scope?: 'x_recent_public_index';
 }

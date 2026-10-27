@@ -7,6 +7,8 @@ export interface RuntimeConfig {
   readonly retry: RetryPolicy;
   readonly runtime: { readonly wakeMs: number; readonly leaseMs: number; readonly shutdownMs: number;
     readonly maxConcurrent: number; readonly batchSize: number };
+  readonly x: { readonly maxPages: number; readonly pageSize: number; readonly requestTimeoutMs: number;
+    readonly safetyLagMs: number; readonly overlapMs: number; readonly fieldDialect: 'post' | 'tweet' };
   readonly services: {
     readonly source: ServiceConfig;
     readonly analysis: ServiceConfig & { readonly model: string | null; readonly version: string; readonly promptVersion: string };

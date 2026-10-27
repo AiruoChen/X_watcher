@@ -4,7 +4,8 @@ export interface RuntimeState {
   ensure(task: ScheduledTask): void;
   tasks(): readonly ScheduledTask[];
   claim(id: string, expectedRevision: number, now: string): ScheduledTask | null;
-  finish(id: string, expectedRevision: number, dueAt: string, failed: boolean, exhausted: boolean, now: string): void;
+  finish(id: string, expectedRevision: number, dueAt: string, failed: boolean, exhausted: boolean, now: string,
+    failure?: { readonly code: string; readonly retryAt: string | null }): void;
   /** Reconcile stage markers only; business claims must be reconciled separately. */
   recover(now: string): number;
 }

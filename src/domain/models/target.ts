@@ -10,3 +10,4 @@ export interface TargetIdentity extends WatchTarget {
   readonly monitorStartedAt: string;
   readonly configRevision: string;
 }
+export interface ResolvedAuthor { readonly authorId: string; readonly handle: string }

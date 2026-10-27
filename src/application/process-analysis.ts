@@ -16,6 +16,7 @@ export class ProcessAnalysis {
       if (!job) continue;
       try {
         const post = this.store.postVersion(job.postKey)!;
+        if (post.completeness !== 'full') { this.store.failAnalysis(job.id, job.revision, null); continue; }
         const analysis = context ? await context.call(signal => this.analyzer.analyze(post, signal), this.config.services.analysis.timeoutMs)
           : await this.analyzer.analyze(post);
         context?.signal.throwIfAborted();

@@ -34,8 +34,15 @@ export function createApplication(config: RuntimeConfig, deps: Dependencies): Sc
   return new Scheduler(config, deps.clock, deps.store, jobs, deps.events);
 }
 
-export function validateDependencies(config: RuntimeConfig, deps: Dependencies): void {
-  if (config.mode !== 'demo') throw new Error('Preview/live mode is not implemented in the framework release.');
+export function validateDependencies(config: RuntimeConfig, deps: Dependencies, sourcePreview = false): void {
+  if (sourcePreview && config.mode === 'preview') {
+    if (config.services.source.provider !== 'x-api-v2' || config.services.analysis.provider !== 'deferred'
+      || deps.analyzer.capability !== 'simulated' || deps.notifications.capability !== 'simulated'
+      || config.targets.some(target => target.provider !== 'x' || deps.sources.get(target.provider)?.capability !== 'real'))
+      throw new Error('B04 preview requires the real X source, deferred analysis and preview mail.');
+    return;
+  }
+  if (config.mode !== 'demo') throw new Error('Preview/live mode is not implemented in this entry point.');
   if (deps.analyzer.capability !== 'simulated' || deps.notifications.capability !== 'simulated'
     || [...deps.sources.values()].some(source => source.capability !== 'simulated')) {
     throw new Error('Demo mode cannot use real adapters.');

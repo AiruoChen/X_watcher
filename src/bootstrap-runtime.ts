@@ -22,7 +22,7 @@ export interface RuntimeDependencies extends Dependencies {
 export function createRuntimeApplication(config: RuntimeConfig, deps: RuntimeDependencies): {
   readonly host: RuntimeHost; readonly scheduler: WorkflowScheduler;
 } {
-  validateDependencies(config, deps);
+  validateDependencies(config, deps, true);
   if (config.storage.kind !== 'sqlite' || deps.store.durability !== 'persistent') throw new Error('Runtime requires persistent SQLite storage.');
   const analysis = new ProcessAnalysis(deps.analyzer, deps.store, deps.rules, deps.clock, config);
   const delivery = new DeliverNotifications(deps.store, deps.notifications, deps.clock);
@@ -33,14 +33,15 @@ export function createRuntimeApplication(config: RuntimeConfig, deps: RuntimeDep
       const count = await new IngestTarget(deps.sources.get(target.provider)!, deps.store, deps.clock, config, deps.hasher).execute(target, context);
       try { deps.events.record({ type: 'poll.completed', targetId: target.id, newPosts: count }); } catch { /* Non-authoritative. */ }
     },
-    analyze: (target, context) => analysis.execute(target, context, config.runtime.batchSize),
+    analyze: (target, context) => config.mode === 'preview' ? Promise.resolve() : analysis.execute(target, context, config.runtime.batchSize),
     deliver: async context => {
+      if (config.mode === 'preview') return;
       for (const item of await delivery.execute(context, config.services.mail.timeoutMs, config.runtime.batchSize)) {
         try { deps.events.record({ type: 'notification.finished', id: item.id, status: item.result.status }); } catch { /* Non-authoritative. */ }
       }
     },
-    digest: (target, window) => digest.execute(target, window, deps.clock.now().toISOString()),
-    digestWindows: target => dueDigests.execute(target),
+    digest: (target, window) => config.mode === 'preview' ? false : digest.execute(target, window, deps.clock.now().toISOString()),
+    digestWindows: target => config.mode === 'preview' ? [] : dueDigests.execute(target),
   };
   const scheduler = new WorkflowScheduler(config, deps.clock, deps.state, jobs, deps.events, deps.random);
   const recovery = new RecoverRuntime(deps.reconcile, deps.state, deps.clock);

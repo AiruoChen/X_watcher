@@ -49,13 +49,16 @@ export class SqliteRuntimeState implements RuntimeState {
       this.save(task); return task;
     });
   }
-  finish(id: string, expectedRevision: number, dueAt: string, failed: boolean, exhausted: boolean, now: string): void {
+  finish(id: string, expectedRevision: number, dueAt: string, failed: boolean, exhausted: boolean, now: string,
+    failure?: { readonly code: string; readonly retryAt: string | null }): void {
     this.write(() => {
       const old = this.get(id);
       if (!old || old.state !== 'running') throw new Error('Task is not running.');
       requireRevision(old.revision, expectedRevision);
+      if (failure?.retryAt && !isInstant(failure.retryAt)) throw new Error('Invalid retry deadline.');
       this.save({ ...old, revision: old.revision + 1, state: exhausted ? 'needs_attention' : 'idle', dueAt,
-        failures: failed ? old.failures + 1 : 0, finishedAt: now });
+        failures: failed ? old.failures + 1 : 0, finishedAt: now, failureCode: failure?.code ?? null,
+        retryNotBeforeAt: failure?.retryAt ?? null });
     });
   }
   recover(now: string): number {

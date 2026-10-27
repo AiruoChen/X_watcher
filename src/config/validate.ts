@@ -66,10 +66,19 @@ export function parseConfig(input: unknown): RuntimeConfig {
     mail: { provider: optional('MAIL_PROVIDER'), credentialEnv: ref('MAIL_CREDENTIAL_ENV'), timeoutMs: number('MAIL_TIMEOUT_SECONDS', 1, 3600) * 1000, from: optional('MAIL_FROM') },
   };
   if (!services.analysis.version || !services.analysis.promptVersion) throw new ConfigError('ANALYZER_VERSION/PROMPT_VERSION');
+  const dialect = text('X_FIELD_DIALECT');
+  if (dialect !== 'post' && dialect !== 'tweet') throw new ConfigError('X_FIELD_DIALECT');
+  const x: RuntimeConfig['x'] = { maxPages: number('X_MAX_PAGES', 1, 100), pageSize: number('X_PAGE_SIZE', 10, 100),
+    requestTimeoutMs: number('X_REQUEST_TIMEOUT_SECONDS', 1, 300) * 1000,
+    safetyLagMs: number('X_SAFETY_LAG_SECONDS', 10, 3600) * 1000, overlapMs: number('X_OVERLAP_SECONDS', 0, 3600) * 1000,
+    fieldDialect: dialect };
   if (services.mail.from !== null) email('MAIL_FROM');
   if (mode !== 'demo') {
-    for (const key of ['SOURCE_PROVIDER','SOURCE_CREDENTIAL_ENV','ANALYSIS_PROVIDER','ANALYSIS_CREDENTIAL_ENV','ANALYSIS_MODEL'] as const)
+    for (const key of ['SOURCE_PROVIDER','SOURCE_CREDENTIAL_ENV','ANALYSIS_PROVIDER'] as const)
       if (!optional(key)) throw new ConfigError(key);
+    if (!(mode === 'preview' && services.analysis.provider === 'deferred')) {
+      for (const key of ['ANALYSIS_CREDENTIAL_ENV','ANALYSIS_MODEL'] as const) if (!optional(key)) throw new ConfigError(key);
+    } else if (services.analysis.credentialEnv || services.analysis.model) throw new ConfigError('ANALYSIS_PROVIDER');
     if (kind !== 'sqlite') throw new ConfigError('STORAGE_KIND');
   }
   if (mode === 'live') {
@@ -80,7 +89,7 @@ export function parseConfig(input: unknown): RuntimeConfig {
   const config: Omit<RuntimeConfig, 'revision'> = { schemaVersion: 1, mode,
     targets: handles.map(handle => ({ id: `x:${handle.toLowerCase()}`, provider: 'x', handle })),
     pollIntervalMs: number('POLL_INTERVAL_MINUTES', 1, 1440) * 60_000, timeZone: zone, dailyDigestAt: at,
-    recipient, storage: { kind, path: text('DATABASE_PATH') }, retry, runtime, policy, services,
+    recipient, storage: { kind, path: text('DATABASE_PATH') }, retry, runtime, x, policy, services,
     budget: { maxCallsPerDay: optional('MAX_CALLS_PER_DAY') === null ? null : number('MAX_CALLS_PER_DAY', 1, 1e9),
       maxCostPerDay: optional('MAX_COST_PER_DAY') === null ? null : number('MAX_COST_PER_DAY', 0.01, 1e9, false) } };
   return { ...config, revision: createHash('sha256').update(JSON.stringify(config)).digest('hex') };

@@ -19,7 +19,7 @@ console.log(describeConfig(custom)); // 不含邮箱、发件人、路径和密�
 
 | 分组 | 字段 | 默认/约束 |
 | --- | --- | --- |
-| 模式 | CONFIG_SCHEMA_VERSION / APP_MODE | 1 / demo；preview/live 能解析，当前启动仍明确拒绝 |
+| 模式 | CONFIG_SCHEMA_VERSION / APP_MODE | 1 / demo；B04 支持显式 source-only preview，live 拒绝启动 |
 | 目标 | WATCH_HANDLES | thsottiaux；逗号分隔，不允许空项或大小写重复 |
 | 时间 | POLL_INTERVAL_MINUTES / TIME_ZONE / DAILY_DIGEST_AT | 30 / Asia/Shanghai / 08:00；HH:mm 严格格式 |
 | 收件人 | NOTIFICATION_TO | demo 为保留域占位地址；live 必须显式填写真实地址 |
@@ -32,6 +32,9 @@ console.log(describeConfig(custom)); // 不含邮箱、发件人、路径和密�
 | 保留 | POST_RETENTION_DAYS / AUDIT_RETENTION_DAYS | 90 / 180 |
 | 重试 | RETRY_MAX_ATTEMPTS / RETRY_BASE_SECONDS / RETRY_MAX_SECONDS / RETRY_JITTER | 5 / 30 / 1800 / 0.2 |
 | 服务 | SOURCE_PROVIDER / ANALYSIS_PROVIDER / MAIL_PROVIDER | 默认未选；没有硬编码供应商 |
+| X 分页 | X_MAX_PAGES / X_PAGE_SIZE | 20 / 100；1–100 页 / 10–100 条 |
+| X 时间 | X_REQUEST_TIMEOUT_SECONDS / X_SAFETY_LAG_SECONDS / X_OVERLAP_SECONDS | 10 / 30 / 120 秒；分别 1–300 / 10–3600 / 0–3600 |
+| X 字段 | X_FIELD_DIALECT | post 或显式 tweet；不自动试探第二套付费请求 |
 | 凭据 | SOURCE_CREDENTIAL_ENV / ANALYSIS_CREDENTIAL_ENV / MAIL_CREDENTIAL_ENV | 环境变量名称，例如 X_API_TOKEN，绝不是密钥本身 |
 | 分析 | ANALYSIS_MODEL / ANALYZER_VERSION / PROMPT_VERSION | 未选型号 / fixture-v1 / v1 |
 | 发件 | MAIL_FROM | 可选裸邮箱地址；live 必填 |
@@ -40,7 +43,7 @@ console.log(describeConfig(custom)); // 不含邮箱、发件人、路径和密�
 
 跨字段规则：最大退避不得小于基础退避；正文保留期覆盖初始回溯、补报日期加一天和重置时效；审计保留期不短于正文。所有数值有上限，不接受 NaN/Infinity/指数或十六进制写法。
 
-preview 要求来源/分析供应商、型号、凭据引用与 SQLite 配置；live 还要求发信服务、发件邮箱、凭据引用与显式收件地址。通过配置校验不表示真实功能已可运行，bootstrap 仍拒绝 preview/live。
+preview 的完整服务配置继续要求来源/分析供应商、型号、凭据引用与 SQLite；B04 新增 ANALYSIS_PROVIDER=deferred 分支，分析型号/凭据必须为空，仅要求来源凭据存在。只有 x:probe/x:preview 及常驻组合根开放 x-api-v2 + deferred + 通知预览的只读组合，模型与邮件不运行。live 仍要求完整服务配置且拒绝启动；配置校验不等于实际账户权限验证。
 
 ## 策略与执行的区别
 
@@ -48,6 +51,6 @@ B01 已消费：目标、时区、日报时间、初始回溯、提醒最大时�
 
 B03 已消费：运行参数、分阶段退避、每次外部调用超时、有限日期追赶与每轮摘要邮件上限。单调时间用于等待和本进程执行权，墙钟用于持久化期限和日历窗口。
 
-仍仅声明并校验：日报宽限/降级、事故阈值、真实服务、预算和自动清理。这些执行能力在 B04–B09 完成；设置字段不会提前启用它们。
+B04 已消费 X 专用参数及真实来源引用，凭据只在组合根传给客户端。仍仅声明并校验：日报宽限/降级、事故阈值、模型/邮件真实服务、预算和自动清理。这些执行能力在 B05–B09 完成；设置字段不会提前启用它们。
 
 demo 与 CI 不读取真实凭据去调用外部服务。收件人仅出现在本地配置/不可变通知中，`describeConfig` 与常规事件不输出它。
